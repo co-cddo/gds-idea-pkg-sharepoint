@@ -9,7 +9,9 @@ The auth flow:
 Required environment variables:
     SHAREPOINT_TENANT_ID  — Azure AD tenant ID
     SHAREPOINT_CLIENT_ID  — Azure AD app registration client ID
-    SHAREPOINT_SITE_ID    — SharePoint site ID
+    SHAREPOINT_SITE_HOST  — SharePoint site hostname (e.g. contoso.sharepoint.com)
+    SHAREPOINT_SITE_PATH  — SharePoint site path (e.g. /sites/my-site)
+    SHAREPOINT_ROLE_ARN   — IAM role ARN to assume before STS JWT vending
 
 Optional:
     AWS_REGION            — AWS region for STS calls (default: eu-west-2)
@@ -41,12 +43,16 @@ class SharePointSession:
         self,
         tenant_id: str,
         client_id: str,
-        site_id: str,
+        site_host: str,
+        site_path: str,
+        role_arn: str,
         aws_region: str = "eu-west-2",
     ):
         self.tenant_id = tenant_id
         self.client_id = client_id
-        self.site_id = site_id
+        self.site_host = site_host
+        self.site_path = site_path
+        self._role_arn = role_arn
         self._aws_region = aws_region
 
         self._credential = ClientAssertionCredential(
@@ -70,7 +76,9 @@ class SharePointSession:
         required = {
             "SHAREPOINT_TENANT_ID": "Azure AD tenant ID",
             "SHAREPOINT_CLIENT_ID": "Azure AD app registration client ID",
-            "SHAREPOINT_SITE_ID": "SharePoint site ID",
+            "SHAREPOINT_SITE_HOST": "SharePoint site hostname (e.g. contoso.sharepoint.com)",
+            "SHAREPOINT_SITE_PATH": "SharePoint site path (e.g. /sites/my-site)",
+            "SHAREPOINT_ROLE_ARN": "IAM role ARN to assume before STS JWT vending",
         }
         missing = [f"{k} ({desc})" for k, desc in required.items() if not os.environ.get(k)]
         if missing:
@@ -79,7 +87,9 @@ class SharePointSession:
         return cls(
             tenant_id=os.environ["SHAREPOINT_TENANT_ID"],
             client_id=os.environ["SHAREPOINT_CLIENT_ID"],
-            site_id=os.environ["SHAREPOINT_SITE_ID"],
+            site_host=os.environ["SHAREPOINT_SITE_HOST"],
+            site_path=os.environ["SHAREPOINT_SITE_PATH"],
+            role_arn=os.environ["SHAREPOINT_ROLE_ARN"],
             aws_region=os.environ.get("AWS_REGION", "eu-west-2"),
         )
 
@@ -101,16 +111,34 @@ class SharePointSession:
     def _vend_aws_jwt(self) -> str:
         """Get a JWT from AWS STS outbound identity federation.
 
+        Assumes the configured IAM role, then calls STS to vend a JWT.
         This JWT is used as a client_assertion to Azure AD.
         """
         try:
             sts = boto3.client("sts", region_name=self._aws_region)
+
+            logger.debug("Assuming role %s before JWT vending", self._role_arn)
+            assumed = sts.assume_role(
+                RoleArn=self._role_arn,
+                RoleSessionName="box2-sharepoint",
+            )
+            creds = assumed["Credentials"]
+            sts = boto3.client(
+                "sts",
+                region_name=self._aws_region,
+                aws_access_key_id=creds["AccessKeyId"],
+                aws_secret_access_key=creds["SecretAccessKey"],
+                aws_session_token=creds["SessionToken"],
+            )
+
             resp = sts.get_web_identity_token(
-                Audience=[f"api://AzureADTokenExchange/{self.client_id}"],
+                Audience=["api://AzureADTokenExchange"],
                 DurationSeconds=300,
                 SigningAlgorithm="RS256",
             )
             logger.debug("AWS STS JWT vended successfully")
             return resp["WebIdentityToken"]
+        except SharePointAuthError:
+            raise
         except Exception as e:
             raise SharePointAuthError(f"AWS STS JWT vending failed: {e}") from e

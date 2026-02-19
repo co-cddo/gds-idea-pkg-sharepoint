@@ -24,7 +24,7 @@ import boto3
 import httpx
 from azure.identity import ClientAssertionCredential
 
-from box2.sharepoint.exceptions import SharePointAuthError, SharePointConfigError
+from box2.sharepoint.exceptions import SharePointAPIError, SharePointAuthError, SharePointConfigError
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +54,7 @@ class SharePointSession:
         self.site_path = site_path
         self._role_arn = role_arn
         self._aws_region = aws_region
+        self._site_id: str | None = None
 
         self._credential = ClientAssertionCredential(
             tenant_id=tenant_id,
@@ -107,6 +108,67 @@ class SharePointSession:
             return token.token
         except Exception as e:
             raise SharePointAuthError(f"Failed to acquire Graph API token: {e}") from e
+
+    def resolve_site_id(self) -> str:
+        """Resolve and cache the Graph API site ID from site_host and site_path.
+
+        Calls ``GET /sites/{site_host}:{site_path}`` on first invocation and
+        caches the result for subsequent calls.
+
+        Returns:
+            The Graph API site ID string.
+
+        Raises:
+            SharePointAPIError: If the Graph API call fails.
+        """
+        if self._site_id is not None:
+            return self._site_id
+
+        site_ref = f"{self.site_host}:{self.site_path}"
+        logger.debug("Resolving site ID for %s", site_ref)
+        data = self.request("GET", f"/sites/{site_ref}")
+        self._site_id = data["id"]
+        logger.debug("Resolved site ID: %s", self._site_id)
+        return self._site_id
+
+    def request(self, method: str, path: str, json: dict | None = None, params: dict | None = None) -> dict:
+        """Make an authenticated request to the Microsoft Graph API.
+
+        Handles token injection and raises structured errors on failure.
+
+        Args:
+            method: HTTP method (GET, POST, PATCH, DELETE).
+            path: URL path relative to ``https://graph.microsoft.com/v1.0``.
+            json: Optional JSON body for POST/PATCH requests.
+            params: Optional query parameters.
+
+        Returns:
+            Parsed JSON response as a dict.
+
+        Raises:
+            SharePointAPIError: If the Graph API returns a non-2xx status.
+            SharePointAuthError: If token acquisition fails.
+        """
+        token = self.get_token()
+        headers = {"Authorization": f"Bearer {token}"}
+
+        response = self._http.request(method, path, headers=headers, json=json, params=params)
+
+        if response.status_code >= 400:
+            body = response.json() if response.content else {}
+            error = body.get("error", {})
+            error_code = error.get("code")
+            error_message = error.get("message", response.text)
+            raise SharePointAPIError(
+                f"Graph API {method} {path} failed ({response.status_code}): {error_message}",
+                status_code=response.status_code,
+                error_code=error_code,
+            )
+
+        if response.status_code == 204:
+            return {}
+
+        return response.json()
 
     def _vend_aws_jwt(self) -> str:
         """Get a JWT from AWS STS outbound identity federation.

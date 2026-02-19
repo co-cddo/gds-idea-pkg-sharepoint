@@ -22,15 +22,11 @@ Usage::
     client.delete_list()
 """
 
-from __future__ import annotations
-
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from box2.sharepoint.exceptions import SharePointAPIError
-
-if TYPE_CHECKING:
-    from box2.sharepoint.session import SharePointSession
+from box2.sharepoint.session import SharePointSession
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +47,7 @@ class ListClient:
         logger.info("ListClient ready (list=%s, list_id=%s)", self.list_name, self._list_id)
 
     @classmethod
-    def new(cls, session: SharePointSession, list_name: str) -> ListClient:
+    def new(cls, session: SharePointSession, list_name: str) -> "ListClient":
         """Create a new SharePoint list and return a connected client.
 
         Creates a generic (custom) list with the given name. If the Graph API

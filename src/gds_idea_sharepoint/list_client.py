@@ -106,6 +106,16 @@ class ListClient:
         logger.debug("Resolved list '%s' -> %s", self.list_name, list_id)
         return list_id
 
+    @property
+    def resource_path(self) -> str:
+        """Graph API resource path for webhook subscriptions.
+
+        Returns:
+            The resource path for this list's items, suitable for use with
+            ``WebhookClient.subscribe()``.
+        """
+        return f"/sites/{self._site_id}/lists/{self._list_id}/items"
+
     def get_items(
         self,
         select: list[str] | None = None,

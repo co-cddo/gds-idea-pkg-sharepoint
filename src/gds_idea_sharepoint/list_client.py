@@ -114,7 +114,7 @@ class ListClient:
             The resource path for this list's items, suitable for use with
             ``WebhookClient.subscribe()``.
         """
-        return f"/sites/{self._site_id}/lists/{self._list_id}/items"
+        return f"/sites/{self._site_id}/lists/{self._list_id}"
 
     def get_items(
         self,

@@ -42,6 +42,7 @@ Usage::
 
 import logging
 import os
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -203,6 +204,35 @@ class DocsClient:
             )
 
         return files[0]
+
+    def get_recent(self, minutes: int = 2) -> list[dict[str, Any]]:
+        """Get files modified in the last N minutes.
+
+        Convenience wrapper around ``get_changed_files()`` that filters the
+        delta results client-side by ``lastModifiedDateTime``. Useful for
+        webhook handlers that need to find what changed since the last
+        notification.
+
+        Note: the Graph delta endpoint does not support ``$filter``, so all
+        delta results are fetched and then filtered in memory.
+
+        Args:
+            minutes: Lookback window in minutes. Defaults to 2.
+
+        Returns:
+            List of file metadata dicts modified within the window,
+            sorted most-recent-first.
+
+        Raises:
+            ValueError: If minutes is not positive.
+            SharePointAPIError: If the Graph API call fails.
+        """
+        if minutes <= 0:
+            raise ValueError(f"minutes must be positive, got {minutes}")
+
+        cutoff = (datetime.now(UTC) - timedelta(minutes=minutes)).isoformat()
+        files = self.get_changed_files()
+        return [f for f in files if f.get("lastModifiedDateTime", "") > cutoff]
 
     def download_file(self, file_metadata: dict[str, Any], download_dir: str = "downloads") -> str:
         """Download a file from SharePoint to local disk.

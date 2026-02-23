@@ -262,6 +262,119 @@ def test_get_latest_changed_file_passes_select(client, mock_session):
 
 
 # ============================================================================
+# get_recent Tests
+# ============================================================================
+
+
+def test_get_recent_returns_only_files_within_window(client, mock_session):
+    """get_recent should filter out files older than the lookback window."""
+    mock_session.request.return_value = {
+        "value": [
+            _file_item(item_id="f1", name="new.pdf", last_modified="2026-02-23T11:59:00Z"),
+            _file_item(item_id="f2", name="old.pdf", last_modified="2026-02-23T11:50:00Z"),
+        ]
+    }
+
+    with patch("box2.sharepoint.docs_client.datetime") as mock_dt:
+        from datetime import UTC, datetime
+
+        now = datetime(2026, 2, 23, 12, 0, 0, tzinfo=UTC)
+        mock_dt.now.return_value = now
+        mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+
+        result = client.get_recent(minutes=2)
+
+    # Only new.pdf (11:59) is within 2 minutes of 12:00; old.pdf (11:50) is not
+    assert len(result) == 1
+    assert result[0]["name"] == "new.pdf"
+
+
+def test_get_recent_returns_empty_when_no_recent_files(client, mock_session):
+    """get_recent should return an empty list when all files are older than the window."""
+    mock_session.request.return_value = {
+        "value": [
+            _file_item(item_id="f1", name="old.pdf", last_modified="2026-02-23T10:00:00Z"),
+        ]
+    }
+
+    with patch("box2.sharepoint.docs_client.datetime") as mock_dt:
+        from datetime import UTC, datetime
+
+        now = datetime(2026, 2, 23, 12, 0, 0, tzinfo=UTC)
+        mock_dt.now.return_value = now
+        mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+
+        result = client.get_recent(minutes=2)
+
+    assert result == []
+
+
+def test_get_recent_calls_get_changed_files(client, mock_session):
+    """get_recent should delegate to get_changed_files for the delta query."""
+    mock_session.request.return_value = {"value": []}
+
+    client.get_recent(minutes=5)
+
+    call_args = mock_session.request.call_args
+    assert call_args.args[1] == f"/drives/{DRIVE_ID}/root/delta"
+
+
+def test_get_recent_filters_out_folders_and_deleted(client, mock_session):
+    """get_recent should exclude folders and deleted items (inherited from get_changed_files)."""
+    mock_session.request.return_value = {
+        "value": [
+            _file_item(item_id="f1", name="new.pdf", last_modified="2026-02-23T11:59:00Z"),
+            _folder_item(),
+            _deleted_item(),
+        ]
+    }
+
+    with patch("box2.sharepoint.docs_client.datetime") as mock_dt:
+        from datetime import UTC, datetime
+
+        now = datetime(2026, 2, 23, 12, 0, 0, tzinfo=UTC)
+        mock_dt.now.return_value = now
+        mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+
+        result = client.get_recent(minutes=5)
+
+    assert len(result) == 1
+    assert result[0]["name"] == "new.pdf"
+
+
+def test_get_recent_defaults_to_two_minutes(client, mock_session):
+    """get_recent should default to a 2-minute lookback window."""
+    mock_session.request.return_value = {
+        "value": [
+            _file_item(item_id="f1", name="new.pdf", last_modified="2026-02-23T11:59:30Z"),
+        ]
+    }
+
+    with patch("box2.sharepoint.docs_client.datetime") as mock_dt:
+        from datetime import UTC, datetime
+
+        now = datetime(2026, 2, 23, 12, 0, 0, tzinfo=UTC)
+        mock_dt.now.return_value = now
+        mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+
+        result = client.get_recent()
+
+    assert len(result) == 1
+
+
+def test_get_recent_rejects_zero_minutes(client):
+    """get_recent should raise ValueError for zero minutes."""
+    with pytest.raises(ValueError, match="must be positive"):
+        client.get_recent(minutes=0)
+
+
+def test_get_recent_rejects_negative_minutes(client):
+    """get_recent should raise ValueError for negative minutes."""
+    with pytest.raises(ValueError, match="must be positive"):
+        client.get_recent(minutes=-1)
+
+
+# ============================================================================
 # download_file Tests
 # ============================================================================
 

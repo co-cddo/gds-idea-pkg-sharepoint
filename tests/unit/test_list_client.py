@@ -247,4 +247,3 @@ def test_resource_path_returns_list_path_without_items(client):
 def test_supported_change_types_returns_updated_only(client):
     """SharePoint lists only support 'updated' change notifications."""
     assert client.supported_change_types == {"updated"}
-

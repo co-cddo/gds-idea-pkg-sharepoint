@@ -6,15 +6,24 @@ across any subscribable resource (lists, drives, etc.).
 
 Usage::
 
-    from box2.sharepoint import SharePointSession, ListClient, WebhookClient
+    from box2.sharepoint import SharePointSession, ListClient, DocsClient, WebhookClient
 
     session = SharePointSession.from_env()
-    lists = ListClient(session, list_name="Correspondence")
     webhooks = WebhookClient(session)
 
-    # Subscribe to changes on the list (ListClient only supports "updated")
+    # Subscribe to changes on a list (ListClient only supports "updated")
+    lists = ListClient(session, list_name="Correspondence")
     sub = webhooks.subscribe(
         resource=lists,
+        notification_url="https://my-server.example.com/webhook",
+        client_state="my-shared-secret",
+        change_types=["updated"],
+    )
+
+    # Subscribe to changes on a document library (DocsClient only supports "updated")
+    docs = DocsClient(session, library_name="Documents")
+    sub = webhooks.subscribe(
+        resource=docs,
         notification_url="https://my-server.example.com/webhook",
         client_state="my-shared-secret",
         change_types=["updated"],
@@ -41,8 +50,10 @@ logger = logging.getLogger(__name__)
 
 VALID_CHANGE_TYPES = {"created", "updated", "deleted"}
 
-# Microsoft Graph maximum subscription lifetime for list items (30 days).
-MAX_EXPIRATION_MINUTES = 43200
+# Microsoft Graph maximum subscription lifetime for SharePoint lists and
+# OneDrive/SharePoint driveItems (under 30 days).
+# https://learn.microsoft.com/en-us/graph/api/resources/subscription#subscription-lifetime
+MAX_EXPIRATION_MINUTES = 42300
 
 
 class WebhookClient:
@@ -50,7 +61,7 @@ class WebhookClient:
 
     Session-level client that can create and manage subscriptions on any
     resource that satisfies the ``SubscribableResource`` protocol (e.g.
-    ``ListClient``, future ``DriveClient``).
+    ``ListClient``, ``DocsClient``).
     """
 
     def __init__(self, session: SharePointSession):
@@ -85,7 +96,7 @@ class WebhookClient:
             change_types: List of change types to subscribe to. Must be supported
                 by the resource (see ``resource.supported_change_types``).
             expiration_minutes: Minutes until the subscription expires.
-                Defaults to 10080 (7 days). Maximum is 43200 (30 days).
+                Defaults to 10080 (7 days). Maximum is 42300 (under 30 days).
 
         Returns:
             The created Subscription.
@@ -157,7 +168,7 @@ class WebhookClient:
         Args:
             subscription_id: The subscription ID to renew.
             expiration_minutes: Minutes from now until new expiration.
-                Defaults to 10080 (7 days). Maximum is 43200 (30 days).
+                Defaults to 10080 (7 days). Maximum is 42300 (under 30 days).
 
         Returns:
             The renewed Subscription with updated expiration.

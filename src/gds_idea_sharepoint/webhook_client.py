@@ -12,12 +12,12 @@ Usage::
     lists = ListClient(session, list_name="Correspondence")
     webhooks = WebhookClient(session)
 
-    # Subscribe to all changes on the list
+    # Subscribe to changes on the list (ListClient only supports "updated")
     sub = webhooks.subscribe(
         resource=lists,
         notification_url="https://my-server.example.com/webhook",
         client_state="my-shared-secret",
-        change_types=["created", "updated", "deleted"],
+        change_types=["updated"],
     )
 
     # Renew before expiry
@@ -71,12 +71,19 @@ class WebhookClient:
         before the subscription is confirmed. The receiver must respond
         with the ``validationToken`` query parameter.
 
+        Change types are validated at two levels:
+
+        1. **Format** — must be one of ``"created"``, ``"updated"``, or
+           ``"deleted"`` (the Graph API superset).
+        2. **Resource** — must be supported by the specific resource. For
+           example, SharePoint lists only support ``"updated"``.
+
         Args:
             resource: A subscribable SharePoint resource (e.g. a ``ListClient``).
             notification_url: Public URL that receives POST notifications.
             client_state: Shared secret sent with each notification for validation.
-            change_types: List of change types to subscribe to. Valid values are
-                ``"created"``, ``"updated"``, and ``"deleted"``.
+            change_types: List of change types to subscribe to. Must be supported
+                by the resource (see ``resource.supported_change_types``).
             expiration_minutes: Minutes until the subscription expires.
                 Defaults to 10080 (7 days). Maximum is 43200 (30 days).
 
@@ -84,12 +91,12 @@ class WebhookClient:
             The created Subscription.
 
         Raises:
-            ValueError: If change_types contains invalid values or expiration is
-                out of range.
+            ValueError: If change_types contains invalid values, unsupported
+                values for this resource, or expiration is out of range.
             SharePointAPIError: If the Graph API call fails (e.g. notification URL
                 validation fails).
         """
-        self._validate_change_types(change_types)
+        self._validate_change_types(change_types, resource)
         self._validate_expiration(expiration_minutes)
 
         expiration_dt = datetime.now(UTC) + timedelta(minutes=expiration_minutes)
@@ -237,20 +244,37 @@ class WebhookClient:
         return None
 
     @staticmethod
-    def _validate_change_types(change_types: list[str]) -> None:
-        """Validate that all change types are recognised by the Graph API.
+    def _validate_change_types(change_types: list[str], resource: SubscribableResource) -> None:
+        """Validate change types against the Graph API superset and the resource's supported types.
+
+        Two-level validation:
+
+        1. All values must be recognised Graph API change types.
+        2. All values must be supported by the specific resource.
 
         Args:
             change_types: List of change type strings.
+            resource: The resource being subscribed to.
 
         Raises:
-            ValueError: If the list is empty or contains invalid values.
+            ValueError: If the list is empty, contains unrecognised values,
+                or contains values unsupported by the resource.
         """
         if not change_types:
             raise ValueError("change_types must not be empty")
+
+        # Level 1: validate against the Graph API superset
         invalid = set(change_types) - VALID_CHANGE_TYPES
         if invalid:
             raise ValueError(f"Invalid change types: {invalid}. Valid values: {VALID_CHANGE_TYPES}")
+
+        # Level 2: validate against the resource's supported types
+        unsupported = set(change_types) - resource.supported_change_types
+        if unsupported:
+            raise ValueError(
+                f"Unsupported change types for this resource: {unsupported}. "
+                f"Supported: {resource.supported_change_types}"
+            )
 
     @staticmethod
     def _validate_expiration(expiration_minutes: int) -> None:

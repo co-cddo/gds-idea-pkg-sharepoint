@@ -232,3 +232,19 @@ def test_delete_list_sends_delete(client, mock_session):
         "DELETE",
         f"/sites/{SITE_ID}/lists/{LIST_ID}",
     )
+
+
+# ============================================================================
+# resource_path and supported_change_types Tests
+# ============================================================================
+
+
+def test_resource_path_returns_list_path_without_items(client):
+    """resource_path should return /sites/{site_id}/lists/{list_id} (no /items suffix)."""
+    assert client.resource_path == f"/sites/{SITE_ID}/lists/{LIST_ID}"
+
+
+def test_supported_change_types_returns_updated_only(client):
+    """SharePoint lists only support 'updated' change notifications."""
+    assert client.supported_change_types == {"updated"}
+

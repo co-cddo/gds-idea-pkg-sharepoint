@@ -17,7 +17,7 @@ from box2.sharepoint.webhook_client import MAX_EXPIRATION_MINUTES, WebhookClient
 
 SITE_ID = "contoso.sharepoint.com,abc-123,def-456"
 LIST_ID = "list-id-789"
-RESOURCE_PATH = f"/sites/{SITE_ID}/lists/{LIST_ID}/items"
+RESOURCE_PATH = f"/sites/{SITE_ID}/lists/{LIST_ID}"
 NOTIFICATION_URL = "https://my-server.example.com/webhook"
 CLIENT_STATE = "my-shared-secret"
 SUBSCRIPTION_ID = "sub-abc-123"
@@ -50,9 +50,24 @@ def mock_session():
 
 @pytest.fixture
 def mock_resource():
-    """Create a mock subscribable resource with a resource_path property."""
+    """Create a mock subscribable resource that supports all change types.
+
+    WebhookClient is generic — it works with any resource. The mock supports
+    all three change types so we can test the full range of subscribe() behaviour.
+    A resource that restricts change types (like ListClient) is tested separately.
+    """
     resource = MagicMock()
     resource.resource_path = RESOURCE_PATH
+    resource.supported_change_types = {"created", "updated", "deleted"}
+    return resource
+
+
+@pytest.fixture
+def list_like_resource():
+    """Create a mock resource that only supports 'updated' (like ListClient)."""
+    resource = MagicMock()
+    resource.resource_path = RESOURCE_PATH
+    resource.supported_change_types = {"updated"}
     return resource
 
 
@@ -179,6 +194,55 @@ def test_subscribe_rejects_invalid_change_type(client, mock_resource):
             client_state=CLIENT_STATE,
             change_types=["created", "modified"],
         )
+
+
+def test_subscribe_rejects_unsupported_change_type_for_resource(client, list_like_resource):
+    """subscribe should raise ValueError when change types are valid but unsupported by the resource."""
+    with pytest.raises(ValueError, match="Unsupported change types for this resource"):
+        client.subscribe(
+            resource=list_like_resource,
+            notification_url=NOTIFICATION_URL,
+            client_state=CLIENT_STATE,
+            change_types=["created", "updated"],
+        )
+
+
+def test_subscribe_unsupported_error_names_the_offending_types(client, list_like_resource):
+    """The unsupported change types error message should list which types are unsupported."""
+    with pytest.raises(ValueError, match="created") as exc_info:
+        client.subscribe(
+            resource=list_like_resource,
+            notification_url=NOTIFICATION_URL,
+            client_state=CLIENT_STATE,
+            change_types=["created", "deleted"],
+        )
+    assert "deleted" in str(exc_info.value)
+
+
+def test_subscribe_unsupported_error_shows_supported_types(client, list_like_resource):
+    """The unsupported change types error message should show what the resource does support."""
+    with pytest.raises(ValueError, match="updated") as exc_info:
+        client.subscribe(
+            resource=list_like_resource,
+            notification_url=NOTIFICATION_URL,
+            client_state=CLIENT_STATE,
+            change_types=["created"],
+        )
+    assert "Supported:" in str(exc_info.value)
+
+
+def test_subscribe_accepts_supported_change_type_for_resource(client, mock_session, list_like_resource):
+    """subscribe should succeed when change types match what the resource supports."""
+    mock_session.request.return_value = _graph_subscription(change_type="updated")
+
+    result = client.subscribe(
+        resource=list_like_resource,
+        notification_url=NOTIFICATION_URL,
+        client_state=CLIENT_STATE,
+        change_types=["updated"],
+    )
+
+    assert isinstance(result, Subscription)
 
 
 def test_subscribe_rejects_zero_expiration(client, mock_resource):
@@ -385,12 +449,12 @@ def test_renew_if_expiring_rejects_negative_threshold(client):
 
 
 # ============================================================================
-# ListClient resource_path Integration
+# ListClient Protocol Compliance
 # ============================================================================
 
 
 def test_list_client_satisfies_subscribable_resource(mock_session):
-    """ListClient should expose a resource_path property usable by WebhookClient."""
+    """ListClient should expose resource_path and supported_change_types."""
     from box2.sharepoint.list_client import ListClient
 
     mock_session.resolve_site_id.return_value = SITE_ID
@@ -398,4 +462,5 @@ def test_list_client_satisfies_subscribable_resource(mock_session):
 
     list_client = ListClient(mock_session, list_name="Test List")
 
-    assert list_client.resource_path == f"/sites/{SITE_ID}/lists/{LIST_ID}/items"
+    assert list_client.resource_path == f"/sites/{SITE_ID}/lists/{LIST_ID}"
+    assert list_client.supported_change_types == {"updated"}

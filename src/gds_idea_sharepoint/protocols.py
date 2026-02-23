@@ -13,9 +13,8 @@ class SubscribableResource(Protocol):
 
     Any client that exposes ``resource_path`` and ``supported_change_types``
     properties satisfies this protocol. For example, ``ListClient`` returns
-    ``/sites/{id}/lists/{id}`` and ``{"updated"}``, while a future
-    ``DriveClient`` would return ``/sites/{id}/drives/{id}/root`` and
-    ``{"created", "updated", "deleted"}``.
+    ``/sites/{id}/lists/{id}`` and ``{"updated"}``, while ``DocsClient``
+    returns ``/drives/{id}/root`` and ``{"updated"}``.
     """
 
     @property
@@ -24,7 +23,7 @@ class SubscribableResource(Protocol):
 
         Returns:
             A path relative to the Graph API root, e.g.
-            ``/sites/{site_id}/lists/{list_id}``.
+            ``/sites/{site_id}/lists/{list_id}`` or ``/drives/{drive_id}/root``.
         """
         ...
 
@@ -33,9 +32,8 @@ class SubscribableResource(Protocol):
         """Change types supported by this resource for webhook subscriptions.
 
         Microsoft Graph supports different change types depending on the
-        resource. For example, SharePoint lists only support ``"updated"``,
-        while OneDrive driveItems support ``"created"``, ``"updated"``,
-        and ``"deleted"``.
+        resource. Both SharePoint lists and drive root items only support
+        ``"updated"`` change notifications.
 
         Returns:
             A set of valid change type strings for this resource.

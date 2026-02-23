@@ -1,5 +1,6 @@
 """box2.sharepoint — SharePoint operations via Microsoft Graph API."""
 
+from box2.sharepoint.docs_client import DocsClient
 from box2.sharepoint.exceptions import (
     SharePointAPIError,
     SharePointAuthError,
@@ -15,6 +16,7 @@ from box2.sharepoint.webhook_client import WebhookClient
 __all__ = [
     "SharePointSession",
     "ListClient",
+    "DocsClient",
     "WebhookClient",
     "Subscription",
     "SubscribableResource",

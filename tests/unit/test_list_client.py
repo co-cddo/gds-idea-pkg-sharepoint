@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -247,3 +247,70 @@ def test_resource_path_returns_list_path_without_items(client):
 def test_supported_change_types_returns_updated_only(client):
     """SharePoint lists only support 'updated' change notifications."""
     assert client.supported_change_types == {"updated"}
+
+
+# ============================================================================
+# get_recent Tests
+# ============================================================================
+
+
+def test_get_recent_calls_get_items_with_filter(client, mock_session):
+    """get_recent should call get_items with a lastModifiedDateTime filter."""
+    mock_session.request.return_value = {"value": []}
+
+    client.get_recent(minutes=5)
+
+    call_args = mock_session.request.call_args
+    params = call_args.kwargs["params"]
+    assert "$filter" in params
+    assert "lastModifiedDateTime gt" in params["$filter"]
+
+
+def test_get_recent_uses_correct_cutoff(client, mock_session):
+    """get_recent should compute the cutoff as now minus the given minutes."""
+    from datetime import UTC, datetime, timedelta
+
+    mock_session.request.return_value = {"value": []}
+
+    with patch("box2.sharepoint.list_client.datetime") as mock_dt:
+        now = datetime(2026, 2, 23, 12, 0, 0, tzinfo=UTC)
+        mock_dt.now.return_value = now
+        mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+
+        client.get_recent(minutes=2)
+
+    params = mock_session.request.call_args.kwargs["params"]
+    expected_cutoff = (now - timedelta(minutes=2)).isoformat()
+    assert expected_cutoff in params["$filter"]
+
+
+def test_get_recent_returns_items(client, mock_session):
+    """get_recent should return the items from the filtered query."""
+    items = [{"id": "1", "fields": {"Title": "Recent"}}]
+    mock_session.request.return_value = {"value": items}
+
+    result = client.get_recent(minutes=2)
+
+    assert result == items
+
+
+def test_get_recent_defaults_to_two_minutes(client, mock_session):
+    """get_recent should default to a 2-minute lookback window."""
+    mock_session.request.return_value = {"value": []}
+
+    client.get_recent()
+
+    params = mock_session.request.call_args.kwargs["params"]
+    assert "lastModifiedDateTime gt" in params["$filter"]
+
+
+def test_get_recent_rejects_zero_minutes(client):
+    """get_recent should raise ValueError for zero minutes."""
+    with pytest.raises(ValueError, match="must be positive"):
+        client.get_recent(minutes=0)
+
+
+def test_get_recent_rejects_negative_minutes(client):
+    """get_recent should raise ValueError for negative minutes."""
+    with pytest.raises(ValueError, match="must be positive"):
+        client.get_recent(minutes=-1)

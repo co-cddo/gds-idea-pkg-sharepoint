@@ -280,7 +280,7 @@ def test_get_recent_uses_correct_cutoff(client, mock_session):
         client.get_recent(minutes=2)
 
     params = mock_session.request.call_args.kwargs["params"]
-    expected_cutoff = (now - timedelta(minutes=2)).isoformat()
+    expected_cutoff = (now - timedelta(minutes=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
     assert expected_cutoff in params["$filter"]
 
 

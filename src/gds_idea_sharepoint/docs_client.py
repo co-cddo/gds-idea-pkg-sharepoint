@@ -230,7 +230,7 @@ class DocsClient:
         if minutes <= 0:
             raise ValueError(f"minutes must be positive, got {minutes}")
 
-        cutoff = (datetime.now(UTC) - timedelta(minutes=minutes)).isoformat()
+        cutoff = (datetime.now(UTC) - timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%SZ")
         files = self.get_changed_files()
         return [f for f in files if f.get("lastModifiedDateTime", "") > cutoff]
 

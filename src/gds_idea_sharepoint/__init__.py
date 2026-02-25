@@ -12,6 +12,8 @@ from box2.sharepoint.models import Subscription
 from box2.sharepoint.protocols import SubscribableResource
 from box2.sharepoint.session import SharePointSession
 from box2.sharepoint.webhook_client import WebhookClient
+from box2.sharepoint.graph_api_schema import generate_graph_schema
+
 
 __all__ = [
     "SharePointSession",
@@ -24,4 +26,5 @@ __all__ = [
     "SharePointConfigError",
     "SharePointAuthError",
     "SharePointAPIError",
+    "generate_graph_schema"
 ]

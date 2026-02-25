@@ -23,6 +23,7 @@ Usage::
 """
 
 import logging
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from box2.sharepoint.exceptions import SharePointAPIError
@@ -158,6 +159,29 @@ class ListClient:
             params=params,
         )
         return data.get("value", [])
+
+    def get_recent(self, minutes: int = 2) -> list[dict[str, Any]]:
+        """Get items modified in the last N minutes.
+
+        Convenience wrapper around ``get_items()`` that builds the OData
+        ``$filter`` expression for recent modifications. Useful for webhook
+        handlers that need to find what changed since the last notification.
+
+        Args:
+            minutes: Lookback window in minutes. Defaults to 2.
+
+        Returns:
+            List of item dicts with fields expanded.
+
+        Raises:
+            ValueError: If minutes is not positive.
+            SharePointAPIError: If the Graph API call fails.
+        """
+        if minutes <= 0:
+            raise ValueError(f"minutes must be positive, got {minutes}")
+
+        cutoff = (datetime.now(UTC) - timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        return self.get_items(filter_expr=f"fields/Modified gt '{cutoff}'")
 
     def get_item(self, item_id: str) -> dict[str, Any]:
         """Get a single item by ID.

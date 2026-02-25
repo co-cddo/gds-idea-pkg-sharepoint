@@ -42,6 +42,8 @@ Usage::
 
 import logging
 import os
+import warnings
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -204,6 +206,35 @@ class DocsClient:
 
         return files[0]
 
+    def get_recent(self, minutes: int = 2) -> list[dict[str, Any]]:
+        """Get files modified in the last N minutes.
+
+        Convenience wrapper around ``get_changed_files()`` that filters the
+        delta results client-side by ``lastModifiedDateTime``. Useful for
+        webhook handlers that need to find what changed since the last
+        notification.
+
+        Note: the Graph delta endpoint does not support ``$filter``, so all
+        delta results are fetched and then filtered in memory.
+
+        Args:
+            minutes: Lookback window in minutes. Defaults to 2.
+
+        Returns:
+            List of file metadata dicts modified within the window,
+            sorted most-recent-first.
+
+        Raises:
+            ValueError: If minutes is not positive.
+            SharePointAPIError: If the Graph API call fails.
+        """
+        if minutes <= 0:
+            raise ValueError(f"minutes must be positive, got {minutes}")
+
+        cutoff = (datetime.now(UTC) - timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        files = self.get_changed_files()
+        return [f for f in files if f.get("lastModifiedDateTime", "") > cutoff]
+
     def download_file(self, file_metadata: dict[str, Any], download_dir: str = "downloads") -> str:
         """Download a file from SharePoint to local disk.
 
@@ -304,8 +335,30 @@ class DocsClient:
         data = self._session.request("GET", path)
         return data.get("value", [])
 
+    def get_item(self, item_id: str) -> dict[str, Any]:
+        """Fetch a single drive item by its ID.
+
+        Used by the receiver pipeline to retrieve the full item after a
+        change notification identifies which item was affected. Also
+        satisfies the ``SubscribableResource`` protocol.
+
+        Args:
+            item_id: The drive item ID.
+
+        Returns:
+            Item metadata dict as returned by the Graph API.
+
+        Raises:
+            SharePointAPIError: If the item is not found or the API call fails.
+        """
+        return self._session.request("GET", f"/drives/{self._drive_id}/items/{item_id}")
+
     def get_file(self, item_id: str) -> dict[str, Any]:
         """Get metadata for a single file by item ID.
+
+        .. deprecated::
+            Use :meth:`get_item` instead. ``get_file`` will be removed in a
+            future release.
 
         Args:
             item_id: The drive item ID.
@@ -316,7 +369,12 @@ class DocsClient:
         Raises:
             SharePointAPIError: If the item is not found or the API call fails.
         """
-        return self._session.request("GET", f"/drives/{self._drive_id}/items/{item_id}")
+        warnings.warn(
+            "get_file is deprecated, use get_item instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.get_item(item_id)
 
     def upload_file(self, file_name: str, content: bytes, folder_path: str = "") -> dict[str, Any]:
         """Upload a file to the document library.

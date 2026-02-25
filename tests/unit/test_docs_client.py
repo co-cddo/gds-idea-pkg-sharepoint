@@ -4,6 +4,7 @@ Tests document library operations using a mocked session, mirroring the
 approach in test_list_client.py.
 """
 
+import warnings
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -262,6 +263,119 @@ def test_get_latest_changed_file_passes_select(client, mock_session):
 
 
 # ============================================================================
+# get_recent Tests
+# ============================================================================
+
+
+def test_get_recent_returns_only_files_within_window(client, mock_session):
+    """get_recent should filter out files older than the lookback window."""
+    mock_session.request.return_value = {
+        "value": [
+            _file_item(item_id="f1", name="new.pdf", last_modified="2026-02-23T11:59:00Z"),
+            _file_item(item_id="f2", name="old.pdf", last_modified="2026-02-23T11:50:00Z"),
+        ]
+    }
+
+    with patch("box2.sharepoint.docs_client.datetime") as mock_dt:
+        from datetime import UTC, datetime
+
+        now = datetime(2026, 2, 23, 12, 0, 0, tzinfo=UTC)
+        mock_dt.now.return_value = now
+        mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+
+        result = client.get_recent(minutes=2)
+
+    # Only new.pdf (11:59) is within 2 minutes of 12:00; old.pdf (11:50) is not
+    assert len(result) == 1
+    assert result[0]["name"] == "new.pdf"
+
+
+def test_get_recent_returns_empty_when_no_recent_files(client, mock_session):
+    """get_recent should return an empty list when all files are older than the window."""
+    mock_session.request.return_value = {
+        "value": [
+            _file_item(item_id="f1", name="old.pdf", last_modified="2026-02-23T10:00:00Z"),
+        ]
+    }
+
+    with patch("box2.sharepoint.docs_client.datetime") as mock_dt:
+        from datetime import UTC, datetime
+
+        now = datetime(2026, 2, 23, 12, 0, 0, tzinfo=UTC)
+        mock_dt.now.return_value = now
+        mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+
+        result = client.get_recent(minutes=2)
+
+    assert result == []
+
+
+def test_get_recent_calls_get_changed_files(client, mock_session):
+    """get_recent should delegate to get_changed_files for the delta query."""
+    mock_session.request.return_value = {"value": []}
+
+    client.get_recent(minutes=5)
+
+    call_args = mock_session.request.call_args
+    assert call_args.args[1] == f"/drives/{DRIVE_ID}/root/delta"
+
+
+def test_get_recent_filters_out_folders_and_deleted(client, mock_session):
+    """get_recent should exclude folders and deleted items (inherited from get_changed_files)."""
+    mock_session.request.return_value = {
+        "value": [
+            _file_item(item_id="f1", name="new.pdf", last_modified="2026-02-23T11:59:00Z"),
+            _folder_item(),
+            _deleted_item(),
+        ]
+    }
+
+    with patch("box2.sharepoint.docs_client.datetime") as mock_dt:
+        from datetime import UTC, datetime
+
+        now = datetime(2026, 2, 23, 12, 0, 0, tzinfo=UTC)
+        mock_dt.now.return_value = now
+        mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+
+        result = client.get_recent(minutes=5)
+
+    assert len(result) == 1
+    assert result[0]["name"] == "new.pdf"
+
+
+def test_get_recent_defaults_to_two_minutes(client, mock_session):
+    """get_recent should default to a 2-minute lookback window."""
+    mock_session.request.return_value = {
+        "value": [
+            _file_item(item_id="f1", name="new.pdf", last_modified="2026-02-23T11:59:30Z"),
+        ]
+    }
+
+    with patch("box2.sharepoint.docs_client.datetime") as mock_dt:
+        from datetime import UTC, datetime
+
+        now = datetime(2026, 2, 23, 12, 0, 0, tzinfo=UTC)
+        mock_dt.now.return_value = now
+        mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+
+        result = client.get_recent()
+
+    assert len(result) == 1
+
+
+def test_get_recent_rejects_zero_minutes(client):
+    """get_recent should raise ValueError for zero minutes."""
+    with pytest.raises(ValueError, match="must be positive"):
+        client.get_recent(minutes=0)
+
+
+def test_get_recent_rejects_negative_minutes(client):
+    """get_recent should raise ValueError for negative minutes."""
+    with pytest.raises(ValueError, match="must be positive"):
+        client.get_recent(minutes=-1)
+
+
+# ============================================================================
 # download_file Tests
 # ============================================================================
 
@@ -389,18 +503,58 @@ def test_list_files_returns_value_list(client, mock_session):
 
 
 # ============================================================================
-# get_file Tests
+# get_item Tests
 # ============================================================================
 
 
-def test_get_file_calls_correct_path(client, mock_session):
-    """get_file should GET /drives/{id}/items/{item_id}."""
+def test_get_item_calls_correct_path(client, mock_session):
+    """get_item should GET /drives/{id}/items/{item_id}."""
     expected = _file_item(item_id="item-42")
     mock_session.request.return_value = expected
 
-    result = client.get_file("item-42")
+    result = client.get_item("item-42")
 
     mock_session.request.assert_called_with("GET", f"/drives/{DRIVE_ID}/items/item-42")
+    assert result["id"] == "item-42"
+
+
+def test_get_item_returns_full_response(client, mock_session):
+    """get_item should return the full item dict from the Graph API."""
+    expected = _file_item(item_id="item-99")
+    mock_session.request.return_value = expected
+
+    result = client.get_item("item-99")
+
+    assert result == expected
+
+
+# ============================================================================
+# get_file Tests (deprecated)
+# ============================================================================
+
+
+def test_get_file_emits_deprecation_warning(client, mock_session):
+    """get_file should emit a DeprecationWarning."""
+    mock_session.request.return_value = _file_item(item_id="item-42")
+
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        client.get_file("item-42")
+
+    assert len(w) == 1
+    assert issubclass(w[0].category, DeprecationWarning)
+    assert "get_item" in str(w[0].message)
+
+
+def test_get_file_delegates_to_get_item(client, mock_session):
+    """get_file should return the same result as get_item."""
+    expected = _file_item(item_id="item-42")
+    mock_session.request.return_value = expected
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        result = client.get_file("item-42")
+
     assert result["id"] == "item-42"
 
 
@@ -494,8 +648,9 @@ def test_delete_file_sends_delete(client, mock_session):
 
 
 def test_docs_client_satisfies_subscribable_resource(mock_session):
-    """DocsClient should expose resource_path and supported_change_types."""
+    """DocsClient should expose resource_path, supported_change_types, and get_item."""
     client = DocsClient(mock_session, library_name=LIBRARY_NAME)
 
     assert client.resource_path == f"/drives/{DRIVE_ID}/root"
     assert client.supported_change_types == {"updated"}
+    assert callable(client.get_item)

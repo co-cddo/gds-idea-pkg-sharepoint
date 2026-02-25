@@ -23,6 +23,23 @@ def _is_enum_type(tp: Any) -> bool:
 
 
 def generate_graph_schema(model: type[BaseModel], list_name: str) -> dict[str, Any]:
+    """
+    Generate a Microsoft Graph list schema from a Pydantic model.
+
+    Iterates over the model's fields and converts them into Graph-compatible
+    column definitions, mapping Python types to appropriate column types
+    (e.g., enum -> choice, datetime -> dateTime, bool -> boolean, default -> text).
+
+    The field named "title" (case-insensitive) is treated specially and mapped
+    to the required "Title" column.
+
+    Args:
+        model: A Pydantic BaseModel subclass describing the schema.
+        list_name: The display name of the resulting list.
+
+    Returns:
+        A dictionary representing the Graph list schema payload.
+    """
     columns: list[dict[str, Any]] = []
 
     for name, field in model.model_fields.items():

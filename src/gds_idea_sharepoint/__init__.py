@@ -7,6 +7,7 @@ from box2.sharepoint.exceptions import (
     SharePointConfigError,
     SharePointError,
 )
+from box2.sharepoint.graph_api_schema import generate_graph_schema
 from box2.sharepoint.list_client import ListClient
 from box2.sharepoint.models import Subscription
 from box2.sharepoint.protocols import SubscribableResource
@@ -24,4 +25,5 @@ __all__ = [
     "SharePointConfigError",
     "SharePointAuthError",
     "SharePointAPIError",
+    "generate_graph_schema",
 ]

@@ -25,5 +25,5 @@ __all__ = [
     "SharePointConfigError",
     "SharePointAuthError",
     "SharePointAPIError",
-    "generate_graph_schema"
+    "generate_graph_schema",
 ]

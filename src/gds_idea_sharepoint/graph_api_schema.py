@@ -6,7 +6,6 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from box2.sharepoint.models.invitation import SharepointInvitation
 
 def _unwrap_optional(tp: Any) -> Any:
     """Optional[T] -> T"""
@@ -43,7 +42,7 @@ def generate_graph_schema(model: type[BaseModel], list_name: str) -> dict[str, A
         # Type mapping (order matters)
         if _is_enum_type(tp):
             column["choice"] = {
-                "choices": [e.value for e in tp],  # SharePoint choices are strings
+                "choices": [e.value for e in tp],
                 "allowTextEntry": False,
                 "displayAs": "dropDown",
             }
@@ -54,7 +53,6 @@ def generate_graph_schema(model: type[BaseModel], list_name: str) -> dict[str, A
         else:
             column["text"] = {"allowMultipleLines": True, "richText": False}
 
-        # Required: Pydantic v2 treats "no default" as required
         if field.is_required():
             column["required"] = True
 

@@ -181,7 +181,7 @@ class ListClient:
             raise ValueError(f"minutes must be positive, got {minutes}")
 
         cutoff = (datetime.now(UTC) - timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        return self.get_items(filter_expr=f"lastModifiedDateTime gt '{cutoff}'")
+        return self.get_items(filter_expr=f"fields/Modified gt '{cutoff}'")
 
     def get_item(self, item_id: str) -> dict[str, Any]:
         """Get a single item by ID.

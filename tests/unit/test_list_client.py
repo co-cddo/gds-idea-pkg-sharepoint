@@ -263,7 +263,7 @@ def test_get_recent_calls_get_items_with_filter(client, mock_session):
     call_args = mock_session.request.call_args
     params = call_args.kwargs["params"]
     assert "$filter" in params
-    assert "lastModifiedDateTime gt" in params["$filter"]
+    assert "fields/Modified gt" in params["$filter"]
 
 
 def test_get_recent_uses_correct_cutoff(client, mock_session):
@@ -301,7 +301,7 @@ def test_get_recent_defaults_to_two_minutes(client, mock_session):
     client.get_recent()
 
     params = mock_session.request.call_args.kwargs["params"]
-    assert "lastModifiedDateTime gt" in params["$filter"]
+    assert "fields/Modified gt" in params["$filter"]
 
 
 def test_get_recent_rejects_zero_minutes(client):

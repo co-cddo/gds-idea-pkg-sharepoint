@@ -1,10 +1,8 @@
-import json
-from enum import Enum
-from typing import Any, Union, get_origin, get_args
-
 from datetime import datetime
+from enum import Enum
+from typing import Any, Union, get_args, get_origin
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 def _unwrap_optional(tp: Any) -> Any:

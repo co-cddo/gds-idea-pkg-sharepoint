@@ -1,10 +1,10 @@
-import pytest
-from pydantic import BaseModel, Field
 from datetime import datetime
 from enum import Enum
-from typing import Optional
-from src.box2.sharepoint.graph_api_schema import generate_graph_schema
 from pprint import pprint
+
+from pydantic import BaseModel, Field
+
+from src.box2.sharepoint.graph_api_schema import generate_graph_schema
 
 # --- Mock Models for Testing ---
 

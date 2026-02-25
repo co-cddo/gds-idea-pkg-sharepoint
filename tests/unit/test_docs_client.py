@@ -4,6 +4,7 @@ Tests document library operations using a mocked session, mirroring the
 approach in test_list_client.py.
 """
 
+import warnings
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -502,18 +503,58 @@ def test_list_files_returns_value_list(client, mock_session):
 
 
 # ============================================================================
-# get_file Tests
+# get_item Tests
 # ============================================================================
 
 
-def test_get_file_calls_correct_path(client, mock_session):
-    """get_file should GET /drives/{id}/items/{item_id}."""
+def test_get_item_calls_correct_path(client, mock_session):
+    """get_item should GET /drives/{id}/items/{item_id}."""
     expected = _file_item(item_id="item-42")
     mock_session.request.return_value = expected
 
-    result = client.get_file("item-42")
+    result = client.get_item("item-42")
 
     mock_session.request.assert_called_with("GET", f"/drives/{DRIVE_ID}/items/item-42")
+    assert result["id"] == "item-42"
+
+
+def test_get_item_returns_full_response(client, mock_session):
+    """get_item should return the full item dict from the Graph API."""
+    expected = _file_item(item_id="item-99")
+    mock_session.request.return_value = expected
+
+    result = client.get_item("item-99")
+
+    assert result == expected
+
+
+# ============================================================================
+# get_file Tests (deprecated)
+# ============================================================================
+
+
+def test_get_file_emits_deprecation_warning(client, mock_session):
+    """get_file should emit a DeprecationWarning."""
+    mock_session.request.return_value = _file_item(item_id="item-42")
+
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        client.get_file("item-42")
+
+    assert len(w) == 1
+    assert issubclass(w[0].category, DeprecationWarning)
+    assert "get_item" in str(w[0].message)
+
+
+def test_get_file_delegates_to_get_item(client, mock_session):
+    """get_file should return the same result as get_item."""
+    expected = _file_item(item_id="item-42")
+    mock_session.request.return_value = expected
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        result = client.get_file("item-42")
+
     assert result["id"] == "item-42"
 
 
@@ -607,8 +648,9 @@ def test_delete_file_sends_delete(client, mock_session):
 
 
 def test_docs_client_satisfies_subscribable_resource(mock_session):
-    """DocsClient should expose resource_path and supported_change_types."""
+    """DocsClient should expose resource_path, supported_change_types, and get_item."""
     client = DocsClient(mock_session, library_name=LIBRARY_NAME)
 
     assert client.resource_path == f"/drives/{DRIVE_ID}/root"
     assert client.supported_change_types == {"updated"}
+    assert callable(client.get_item)

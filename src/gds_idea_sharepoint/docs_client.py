@@ -42,6 +42,7 @@ Usage::
 
 import logging
 import os
+import warnings
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -334,8 +335,30 @@ class DocsClient:
         data = self._session.request("GET", path)
         return data.get("value", [])
 
+    def get_item(self, item_id: str) -> dict[str, Any]:
+        """Fetch a single drive item by its ID.
+
+        Used by the receiver pipeline to retrieve the full item after a
+        change notification identifies which item was affected. Also
+        satisfies the ``SubscribableResource`` protocol.
+
+        Args:
+            item_id: The drive item ID.
+
+        Returns:
+            Item metadata dict as returned by the Graph API.
+
+        Raises:
+            SharePointAPIError: If the item is not found or the API call fails.
+        """
+        return self._session.request("GET", f"/drives/{self._drive_id}/items/{item_id}")
+
     def get_file(self, item_id: str) -> dict[str, Any]:
         """Get metadata for a single file by item ID.
+
+        .. deprecated::
+            Use :meth:`get_item` instead. ``get_file`` will be removed in a
+            future release.
 
         Args:
             item_id: The drive item ID.
@@ -346,7 +369,12 @@ class DocsClient:
         Raises:
             SharePointAPIError: If the item is not found or the API call fails.
         """
-        return self._session.request("GET", f"/drives/{self._drive_id}/items/{item_id}")
+        warnings.warn(
+            "get_file is deprecated, use get_item instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.get_item(item_id)
 
     def upload_file(self, file_name: str, content: bytes, folder_path: str = "") -> dict[str, Any]:
         """Upload a file to the document library.

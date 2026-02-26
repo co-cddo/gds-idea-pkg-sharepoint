@@ -24,12 +24,12 @@ class MockModel(BaseModel):
 
 
 def test_title_field_mapping():
-    """Verify 'title' maps to the built-in SharePoint 'Title' name and display name."""
+    """Verify 'title' is skipped because SharePoint creates a built-in Title column."""
     schema = generate_graph_schema(MockModel, "Test List")
-    title_col = next(c for c in schema["columns"] if c["name"] == "Title")
+    column_names = [c["name"] for c in schema["columns"]]
 
-    assert title_col["name"] == "Title"
-    assert title_col["displayName"] == "Title"
+    assert "title" not in column_names
+    assert "Title" not in column_names
 
 
 def test_title_case_formatting():

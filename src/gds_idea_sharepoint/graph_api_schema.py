@@ -1,8 +1,9 @@
 from datetime import datetime
 from enum import Enum
 from typing import Any, Union, get_args, get_origin
-
+import logging
 from pydantic import BaseModel
+logger = logging.getLogger(__name__)
 
 
 def _unwrap_optional(tp: Any) -> Any:
@@ -14,21 +15,21 @@ def _unwrap_optional(tp: Any) -> Any:
             return args[0]
     return tp
 
-
 def _is_enum_type(tp: Any) -> bool:
     try:
         return isinstance(tp, type) and issubclass(tp, Enum)
     except TypeError:
         return False
 
-
 def generate_graph_schema(model: type[BaseModel], list_name: str) -> dict[str, Any]:
     """
     Generate a Microsoft Graph list schema from a Pydantic model.
+    
+    This version skips 'title' and 'uin' fields during creation because 
+    SharePoint creates a mandatory 'Title' column by default. 
 
     Iterates over the model's fields and converts them into Graph-compatible
     column definitions, mapping Python types to appropriate column types
-    (e.g., enum -> choice, datetime -> dateTime, bool -> boolean, default -> text).
 
     The field named "title" (case-insensitive) is treated specially and mapped
     to the required "Title" column.
@@ -39,22 +40,27 @@ def generate_graph_schema(model: type[BaseModel], list_name: str) -> dict[str, A
 
     Returns:
         A dictionary representing the Graph list schema payload.
+    
     """
     columns: list[dict[str, Any]] = []
 
-    for name, field in model.model_fields.items():
-        tp = _unwrap_optional(field.annotation)
+    BUILT_IN_REDIRECTS = {"title", "uin"}
 
+    for name, field in model.model_fields.items():
+        # 1. Skip the redirect fields
+        if name.lower() in BUILT_IN_REDIRECTS:
+            logger.info(f"Field '{name}' will be handled by the built-in 'Title' column. Skipping schema entry.")
+            continue
+
+        tp = _unwrap_optional(field.annotation)
         formatted_display_name = name.replace("_", " ").title()
-        is_title = name.lower() == "title"
 
         column: dict[str, Any] = {
-            "name": "Title" if is_title else name,
-            "displayName": "Title" if is_title else formatted_display_name,
+            "name": name,
+            "displayName": formatted_display_name,
             "description": (field.description or ""),
         }
 
-        # Type mapping (order matters)
         if _is_enum_type(tp):
             column["choice"] = {
                 "choices": [e.value for e in tp],

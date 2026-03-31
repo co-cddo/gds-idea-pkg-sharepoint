@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from pprint import pprint
 
-from pydantic import BaseModel, Field
+from pydantic import AnyHttpUrl, BaseModel, Field
 
 from src.box2.sharepoint.graph_api_schema import generate_graph_schema
 
@@ -21,6 +21,7 @@ class MockModel(BaseModel):
     status: MockStatus = Field(default=MockStatus.OPEN)
     long_description: str = Field(description="A very long explanation")
     participants: list[str] = Field(default_factory=list)
+    links: list[AnyHttpUrl] = Field(default_factory=list, description="Reference URLs")
 
 
 def test_title_field_mapping():
@@ -49,6 +50,7 @@ def test_text_fields_default_to_multiline():
 
     assert "text" in desc_col
     assert desc_col["text"]["allowMultipleLines"] is True
+    assert desc_col["text"]["textType"] == "plain"
 
 
 def test_choice_column_mapping():
@@ -70,11 +72,22 @@ def test_datetime_column_mapping():
 
 
 def test_list_to_multiline_text():
-    """Verify list[str] (arrays) are handled as multiline text."""
+    """Verify list[str] (arrays) are handled as multiline plain text."""
     schema = generate_graph_schema(MockModel, "Test List")
     part_col = next(c for c in schema["columns"] if c["name"] == "participants")
 
     assert part_col["text"]["allowMultipleLines"] is True
+    assert part_col["text"]["textType"] == "plain"
+
+
+def test_url_list_to_rich_text():
+    """Verify list[AnyHttpUrl] fields produce a rich-text column."""
+    schema = generate_graph_schema(MockModel, "Test List")
+    links_col = next(c for c in schema["columns"] if c["name"] == "links")
+
+    assert "text" in links_col
+    assert links_col["text"]["allowMultipleLines"] is True
+    assert links_col["text"]["textType"] == "richText"
 
 
 def test_debug_schema_output():

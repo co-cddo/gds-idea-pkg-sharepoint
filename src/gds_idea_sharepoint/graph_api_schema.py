@@ -48,7 +48,7 @@ def generate_graph_schema(model: type[BaseModel], list_name: str) -> dict[str, A
     """
     Generate a Microsoft Graph list schema from a Pydantic model.
 
-    This version skips 'title' and 'uin' fields during creation because
+    This version skips the 'title' field during creation because
     SharePoint creates a mandatory 'Title' column by default.
 
     Iterates over the model's fields and converts them into Graph-compatible
@@ -67,7 +67,7 @@ def generate_graph_schema(model: type[BaseModel], list_name: str) -> dict[str, A
     """
     columns: list[dict[str, Any]] = []
 
-    built_in_redirects = {"title", "uin"}
+    built_in_redirects = {"title"}
 
     for name, field in model.model_fields.items():
         # 1. Skip the redirect fields

@@ -3,9 +3,13 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Union, get_args, get_origin
 
-from pydantic import BaseModel
+from pydantic import AnyHttpUrl, AnyUrl, BaseModel, HttpUrl
 
 logger = logging.getLogger(__name__)
+
+# Pydantic URL types that should map to rich-text SharePoint columns so that
+# values can be rendered as clickable HTML links.
+_URL_TYPES: set[type] = {AnyHttpUrl, HttpUrl, AnyUrl}
 
 
 def _unwrap_optional(tp: Any) -> Any:
@@ -23,6 +27,21 @@ def _is_enum_type(tp: Any) -> bool:
         return isinstance(tp, type) and issubclass(tp, Enum)
     except TypeError:
         return False
+
+
+def _contains_url_type(tp: Any) -> bool:
+    """Return True if *tp* is, or contains, a Pydantic URL type.
+
+    Handles both bare ``AnyHttpUrl`` and generic aliases like
+    ``list[AnyHttpUrl]``.
+    """
+    if tp in _URL_TYPES:
+        return True
+    # Check inner type args (e.g. list[AnyHttpUrl] -> (AnyHttpUrl,))
+    for arg in get_args(tp):
+        if arg in _URL_TYPES:
+            return True
+    return False
 
 
 def generate_graph_schema(model: type[BaseModel], list_name: str) -> dict[str, Any]:
@@ -76,7 +95,8 @@ def generate_graph_schema(model: type[BaseModel], list_name: str) -> dict[str, A
         elif tp is bool:
             column["boolean"] = {}
         else:
-            column["text"] = {"allowMultipleLines": True, "richText": False}
+            text_type = "richText" if _contains_url_type(tp) else "plain"
+            column["text"] = {"allowMultipleLines": True, "textType": text_type}
 
         if field.is_required():
             column["required"] = True

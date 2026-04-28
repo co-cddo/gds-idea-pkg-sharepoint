@@ -358,3 +358,53 @@ def test_list_existing_calls_correct_endpoint(mock_session):
     list_existing(mock_session)
 
     mock_session.request.assert_called_with("GET", f"/sites/{SITE_ID}/lists")
+
+
+# ============================================================================
+# ListClient.new_with_schema Tests
+# ============================================================================
+
+
+def test_new_with_schema_posts_graph_schema(mock_session):
+    """new_with_schema should POST a schema payload generated from the Pydantic model."""
+    from pydantic import BaseModel, Field
+
+    class SimpleModel(BaseModel):
+        title: str = Field(description="Title")
+        notes: str = Field(description="Notes")
+
+    # The first request call returns the lists (for constructor's _resolve_list_id)
+    # We need to set up returns for: POST (create), GET (resolve list id)
+    mock_session.request.side_effect = [
+        {},  # POST create list
+        {"value": [{"id": "new-list-id", "displayName": "TestList"}]},  # GET resolve
+    ]
+
+    ListClient.new_with_schema(mock_session, "TestList", SimpleModel)
+
+    # First call should be POST to create with schema payload
+    post_call = mock_session.request.call_args_list[0]
+    assert post_call[0][0] == "POST"
+    assert post_call[0][1] == f"/sites/{SITE_ID}/lists"
+    payload = post_call[1]["json"]
+    assert payload["displayName"] == "TestList"
+    assert any(col["name"] == "notes" for col in payload["columns"])
+
+
+def test_new_with_schema_returns_connected_client(mock_session):
+    """new_with_schema should return a ListClient connected to the new list."""
+    from pydantic import BaseModel, Field
+
+    class SimpleModel(BaseModel):
+        title: str = Field(description="Title")
+
+    mock_session.request.side_effect = [
+        {},  # POST create
+        {"value": [{"id": "new-id", "displayName": "NewList"}]},  # GET resolve
+    ]
+
+    client = ListClient.new_with_schema(mock_session, "NewList", SimpleModel)
+
+    assert isinstance(client, ListClient)
+    assert client.list_name == "NewList"
+    assert client._list_id == "new-id"

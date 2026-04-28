@@ -35,7 +35,10 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from pydantic import BaseModel
+
 from box2.sharepoint.exceptions import SharePointAPIError
+from box2.sharepoint.graph_api_schema import generate_graph_schema
 from box2.sharepoint.session import SharePointSession
 
 logger = logging.getLogger(__name__)
@@ -103,6 +106,39 @@ class ListClient:
             },
         )
         logger.info("List '%s' created", list_name)
+
+        return cls(session, list_name)
+
+    @classmethod
+    def new_with_schema(
+        cls,
+        session: SharePointSession,
+        list_name: str,
+        model: type[BaseModel],
+    ) -> "ListClient":
+        """Create a new SharePoint list with columns from a Pydantic model.
+
+        Generates the Graph API column schema from the model's field
+        definitions using ``generate_graph_schema()``, creates the list,
+        and returns a connected client.
+
+        Args:
+            session: An authenticated SharePointSession.
+            list_name: Display name for the new list.
+            model: A Pydantic BaseModel subclass defining the list columns.
+
+        Returns:
+            A connected ListClient instance for the newly created list.
+
+        Raises:
+            SharePointAPIError: If list creation fails (e.g. list already exists).
+        """
+        site_id = session.resolve_site_id()
+        payload = generate_graph_schema(model, list_name)
+
+        logger.info("Creating list '%s' with schema from %s", list_name, model.__name__)
+        session.request("POST", f"/sites/{site_id}/lists", json=payload)
+        logger.info("List '%s' created with schema", list_name)
 
         return cls(session, list_name)
 

@@ -8,7 +8,7 @@ from box2.sharepoint.exceptions import (
     SharePointError,
 )
 from box2.sharepoint.graph_api_schema import generate_graph_schema
-from box2.sharepoint.list_client import ListClient
+from box2.sharepoint.list_client import ListClient, list_existing
 from box2.sharepoint.models import Subscription
 from box2.sharepoint.protocols import SubscribableResource
 from box2.sharepoint.session import SharePointSession
@@ -17,6 +17,7 @@ from box2.sharepoint.webhook_client import WebhookClient
 __all__ = [
     "SharePointSession",
     "ListClient",
+    "list_existing",
     "DocsClient",
     "WebhookClient",
     "Subscription",

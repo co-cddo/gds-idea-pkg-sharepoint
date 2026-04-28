@@ -314,3 +314,47 @@ def test_get_recent_rejects_negative_minutes(client):
     """get_recent should raise ValueError for negative minutes."""
     with pytest.raises(ValueError, match="must be positive"):
         client.get_recent(minutes=-1)
+
+
+# ============================================================================
+# list_existing Tests
+# ============================================================================
+
+
+def test_list_existing_returns_display_names(mock_session):
+    """list_existing should return display names of all lists on the site."""
+    from box2.sharepoint.list_client import list_existing
+
+    mock_session.request.return_value = {
+        "value": [
+            {"id": "id-1", "displayName": "Invitations"},
+            {"id": "id-2", "displayName": "Submissions"},
+            {"id": "id-3", "displayName": "Actions_Tracker"},
+        ]
+    }
+
+    result = list_existing(mock_session)
+
+    assert result == ["Actions_Tracker", "Invitations", "Submissions"]
+
+
+def test_list_existing_returns_empty_for_no_lists(mock_session):
+    """list_existing should return an empty list when no lists exist."""
+    from box2.sharepoint.list_client import list_existing
+
+    mock_session.request.return_value = {"value": []}
+
+    result = list_existing(mock_session)
+
+    assert result == []
+
+
+def test_list_existing_calls_correct_endpoint(mock_session):
+    """list_existing should query GET /sites/{site_id}/lists."""
+    from box2.sharepoint.list_client import list_existing
+
+    mock_session.request.return_value = {"value": []}
+
+    list_existing(mock_session)
+
+    mock_session.request.assert_called_with("GET", f"/sites/{SITE_ID}/lists")

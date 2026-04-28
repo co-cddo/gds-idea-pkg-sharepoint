@@ -5,15 +5,24 @@ SharePointSession which handles the auth chain and HTTP requests.
 
 Usage::
 
-    from box2.sharepoint import SharePointSession, ListClient
+    from box2.sharepoint import SharePointSession, ListClient, list_existing
 
     session = SharePointSession.from_env()
+
+    # See what lists exist
+    names = list_existing(session)
 
     # Connect to an existing list
     client = ListClient(session, list_name="My List")
 
     # Or create a new list
     client = ListClient.new(session, list_name="My New List")
+
+    # Or create with a Pydantic-derived schema
+    client = ListClient.new_with_schema(session, "Invitations", SharepointInvitation)
+
+    # Or ensure a list exists (create if missing, connect if present)
+    client = ListClient.ensure(session, "Invitations", SharepointInvitation)
 
     items = client.get_items()
     item = client.create_item({"Title": "New item", "Status": "Open"})
@@ -30,6 +39,23 @@ from box2.sharepoint.exceptions import SharePointAPIError
 from box2.sharepoint.session import SharePointSession
 
 logger = logging.getLogger(__name__)
+
+
+def list_existing(session: SharePointSession) -> list[str]:
+    """Return display names of all lists on the SharePoint site.
+
+    Args:
+        session: An authenticated SharePointSession.
+
+    Returns:
+        Sorted list of display names for all lists on the site.
+
+    Raises:
+        SharePointAPIError: If the Graph API call fails.
+    """
+    site_id = session.resolve_site_id()
+    resp = session.request("GET", f"/sites/{site_id}/lists")
+    return sorted(lst["displayName"] for lst in resp.get("value", []))
 
 
 class ListClient:

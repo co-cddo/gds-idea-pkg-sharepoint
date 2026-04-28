@@ -408,3 +408,53 @@ def test_new_with_schema_returns_connected_client(mock_session):
     assert isinstance(client, ListClient)
     assert client.list_name == "NewList"
     assert client._list_id == "new-id"
+
+
+# ============================================================================
+# ListClient.ensure Tests
+# ============================================================================
+
+
+def test_ensure_connects_when_list_exists(mock_session):
+    """ensure should return a connected client without creating when the list exists."""
+    from pydantic import BaseModel, Field
+
+    class SimpleModel(BaseModel):
+        title: str = Field(description="Title")
+
+    # First call: list_existing() queries lists
+    # Second call: constructor's _resolve_list_id() queries lists
+    mock_session.request.side_effect = [
+        {"value": [{"id": LIST_ID, "displayName": LIST_NAME}]},  # GET for list_existing
+        {"value": [{"id": LIST_ID, "displayName": LIST_NAME}]},  # GET for _resolve_list_id
+    ]
+
+    client = ListClient.ensure(mock_session, LIST_NAME, SimpleModel)
+
+    assert isinstance(client, ListClient)
+    assert client.list_name == LIST_NAME
+    # No POST should have been made — list already existed
+    for call_args in mock_session.request.call_args_list:
+        assert call_args[0][0] == "GET"
+
+
+def test_ensure_creates_when_list_missing(mock_session):
+    """ensure should create the list with schema when it doesn't exist."""
+    from pydantic import BaseModel, Field
+
+    class SimpleModel(BaseModel):
+        title: str = Field(description="Title")
+
+    mock_session.request.side_effect = [
+        {"value": []},  # GET for list_existing — empty, list doesn't exist
+        {},  # POST create list with schema
+        {"value": [{"id": "created-id", "displayName": "NewList"}]},  # GET for _resolve_list_id
+    ]
+
+    client = ListClient.ensure(mock_session, "NewList", SimpleModel)
+
+    assert isinstance(client, ListClient)
+    assert client.list_name == "NewList"
+    # POST should have been made to create the list
+    post_calls = [c for c in mock_session.request.call_args_list if c[0][0] == "POST"]
+    assert len(post_calls) == 1

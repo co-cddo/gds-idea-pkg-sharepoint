@@ -142,6 +142,40 @@ class ListClient:
 
         return cls(session, list_name)
 
+    @classmethod
+    def ensure(
+        cls,
+        session: SharePointSession,
+        list_name: str,
+        model: type[BaseModel],
+    ) -> "ListClient":
+        """Ensure a SharePoint list exists, creating it if missing.
+
+        Idempotent: if the list already exists, connects to it and returns
+        a client. If it doesn't exist, creates it with columns derived
+        from the Pydantic model via ``new_with_schema()``, then returns a
+        connected client.
+
+        Args:
+            session: An authenticated SharePointSession.
+            list_name: Display name for the list.
+            model: A Pydantic BaseModel subclass defining the list columns.
+                Only used if the list needs to be created.
+
+        Returns:
+            A connected ListClient instance.
+
+        Raises:
+            SharePointAPIError: If the Graph API calls fail.
+        """
+        existing = list_existing(session)
+        if list_name in existing:
+            logger.info("List '%s' already exists, connecting", list_name)
+            return cls(session, list_name)
+
+        logger.info("List '%s' not found, creating with schema from %s", list_name, model.__name__)
+        return cls.new_with_schema(session, list_name, model)
+
     def _resolve_list_id(self) -> str:
         """Resolve the list ID by name from the SharePoint site.
 

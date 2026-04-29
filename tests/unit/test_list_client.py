@@ -314,3 +314,147 @@ def test_get_recent_rejects_negative_minutes(client):
     """get_recent should raise ValueError for negative minutes."""
     with pytest.raises(ValueError, match="must be positive"):
         client.get_recent(minutes=-1)
+
+
+# ============================================================================
+# list_existing Tests
+# ============================================================================
+
+
+def test_list_existing_returns_display_names(mock_session):
+    """list_existing should return display names of all lists on the site."""
+    from box2.sharepoint.list_client import list_existing
+
+    mock_session.request.return_value = {
+        "value": [
+            {"id": "id-1", "displayName": "Invitations"},
+            {"id": "id-2", "displayName": "Submissions"},
+            {"id": "id-3", "displayName": "Actions_Tracker"},
+        ]
+    }
+
+    result = list_existing(mock_session)
+
+    assert result == ["Actions_Tracker", "Invitations", "Submissions"]
+
+
+def test_list_existing_returns_empty_for_no_lists(mock_session):
+    """list_existing should return an empty list when no lists exist."""
+    from box2.sharepoint.list_client import list_existing
+
+    mock_session.request.return_value = {"value": []}
+
+    result = list_existing(mock_session)
+
+    assert result == []
+
+
+def test_list_existing_calls_correct_endpoint(mock_session):
+    """list_existing should query GET /sites/{site_id}/lists."""
+    from box2.sharepoint.list_client import list_existing
+
+    mock_session.request.return_value = {"value": []}
+
+    list_existing(mock_session)
+
+    mock_session.request.assert_called_with("GET", f"/sites/{SITE_ID}/lists")
+
+
+# ============================================================================
+# ListClient.new_with_schema Tests
+# ============================================================================
+
+
+def test_new_with_schema_posts_graph_schema(mock_session):
+    """new_with_schema should POST a schema payload generated from the Pydantic model."""
+    from pydantic import BaseModel, Field
+
+    class SimpleModel(BaseModel):
+        title: str = Field(description="Title")
+        notes: str = Field(description="Notes")
+
+    # The first request call returns the lists (for constructor's _resolve_list_id)
+    # We need to set up returns for: POST (create), GET (resolve list id)
+    mock_session.request.side_effect = [
+        {},  # POST create list
+        {"value": [{"id": "new-list-id", "displayName": "TestList"}]},  # GET resolve
+    ]
+
+    ListClient.new_with_schema(mock_session, "TestList", SimpleModel)
+
+    # First call should be POST to create with schema payload
+    post_call = mock_session.request.call_args_list[0]
+    assert post_call[0][0] == "POST"
+    assert post_call[0][1] == f"/sites/{SITE_ID}/lists"
+    payload = post_call[1]["json"]
+    assert payload["displayName"] == "TestList"
+    assert any(col["name"] == "notes" for col in payload["columns"])
+
+
+def test_new_with_schema_returns_connected_client(mock_session):
+    """new_with_schema should return a ListClient connected to the new list."""
+    from pydantic import BaseModel, Field
+
+    class SimpleModel(BaseModel):
+        title: str = Field(description="Title")
+
+    mock_session.request.side_effect = [
+        {},  # POST create
+        {"value": [{"id": "new-id", "displayName": "NewList"}]},  # GET resolve
+    ]
+
+    client = ListClient.new_with_schema(mock_session, "NewList", SimpleModel)
+
+    assert isinstance(client, ListClient)
+    assert client.list_name == "NewList"
+    assert client._list_id == "new-id"
+
+
+# ============================================================================
+# ListClient.ensure Tests
+# ============================================================================
+
+
+def test_ensure_connects_when_list_exists(mock_session):
+    """ensure should return a connected client without creating when the list exists."""
+    from pydantic import BaseModel, Field
+
+    class SimpleModel(BaseModel):
+        title: str = Field(description="Title")
+
+    # First call: list_existing() queries lists
+    # Second call: constructor's _resolve_list_id() queries lists
+    mock_session.request.side_effect = [
+        {"value": [{"id": LIST_ID, "displayName": LIST_NAME}]},  # GET for list_existing
+        {"value": [{"id": LIST_ID, "displayName": LIST_NAME}]},  # GET for _resolve_list_id
+    ]
+
+    client = ListClient.ensure(mock_session, LIST_NAME, SimpleModel)
+
+    assert isinstance(client, ListClient)
+    assert client.list_name == LIST_NAME
+    # No POST should have been made — list already existed
+    for call_args in mock_session.request.call_args_list:
+        assert call_args[0][0] == "GET"
+
+
+def test_ensure_creates_when_list_missing(mock_session):
+    """ensure should create the list with schema when it doesn't exist."""
+    from pydantic import BaseModel, Field
+
+    class SimpleModel(BaseModel):
+        title: str = Field(description="Title")
+
+    mock_session.request.side_effect = [
+        {"value": []},  # GET for list_existing — empty, list doesn't exist
+        {},  # POST create list with schema
+        {"value": [{"id": "created-id", "displayName": "NewList"}]},  # GET for _resolve_list_id
+    ]
+
+    client = ListClient.ensure(mock_session, "NewList", SimpleModel)
+
+    assert isinstance(client, ListClient)
+    assert client.list_name == "NewList"
+    # POST should have been made to create the list
+    post_calls = [c for c in mock_session.request.call_args_list if c[0][0] == "POST"]
+    assert len(post_calls) == 1

@@ -5,15 +5,24 @@ SharePointSession which handles the auth chain and HTTP requests.
 
 Usage::
 
-    from box2.sharepoint import SharePointSession, ListClient
+    from box2.sharepoint import SharePointSession, ListClient, list_existing
 
     session = SharePointSession.from_env()
+
+    # See what lists exist
+    names = list_existing(session)
 
     # Connect to an existing list
     client = ListClient(session, list_name="My List")
 
     # Or create a new list
     client = ListClient.new(session, list_name="My New List")
+
+    # Or create with a Pydantic-derived schema
+    client = ListClient.new_with_schema(session, "Invitations", SharepointInvitation)
+
+    # Or ensure a list exists (create if missing, connect if present)
+    client = ListClient.ensure(session, "Invitations", SharepointInvitation)
 
     items = client.get_items()
     item = client.create_item({"Title": "New item", "Status": "Open"})
@@ -26,10 +35,30 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from pydantic import BaseModel
+
 from box2.sharepoint.exceptions import SharePointAPIError
+from box2.sharepoint.graph_api_schema import generate_graph_schema
 from box2.sharepoint.session import SharePointSession
 
 logger = logging.getLogger(__name__)
+
+
+def list_existing(session: SharePointSession) -> list[str]:
+    """Return display names of all lists on the SharePoint site.
+
+    Args:
+        session: An authenticated SharePointSession.
+
+    Returns:
+        Sorted list of display names for all lists on the site.
+
+    Raises:
+        SharePointAPIError: If the Graph API call fails.
+    """
+    site_id = session.resolve_site_id()
+    resp = session.request("GET", f"/sites/{site_id}/lists")
+    return sorted(lst["displayName"] for lst in resp.get("value", []))
 
 
 class ListClient:
@@ -79,6 +108,73 @@ class ListClient:
         logger.info("List '%s' created", list_name)
 
         return cls(session, list_name)
+
+    @classmethod
+    def new_with_schema(
+        cls,
+        session: SharePointSession,
+        list_name: str,
+        model: type[BaseModel],
+    ) -> "ListClient":
+        """Create a new SharePoint list with columns from a Pydantic model.
+
+        Generates the Graph API column schema from the model's field
+        definitions using ``generate_graph_schema()``, creates the list,
+        and returns a connected client.
+
+        Args:
+            session: An authenticated SharePointSession.
+            list_name: Display name for the new list.
+            model: A Pydantic BaseModel subclass defining the list columns.
+
+        Returns:
+            A connected ListClient instance for the newly created list.
+
+        Raises:
+            SharePointAPIError: If list creation fails (e.g. list already exists).
+        """
+        site_id = session.resolve_site_id()
+        payload = generate_graph_schema(model, list_name)
+
+        logger.info("Creating list '%s' with schema from %s", list_name, model.__name__)
+        session.request("POST", f"/sites/{site_id}/lists", json=payload)
+        logger.info("List '%s' created with schema", list_name)
+
+        return cls(session, list_name)
+
+    @classmethod
+    def ensure(
+        cls,
+        session: SharePointSession,
+        list_name: str,
+        model: type[BaseModel],
+    ) -> "ListClient":
+        """Ensure a SharePoint list exists, creating it if missing.
+
+        Idempotent: if the list already exists, connects to it and returns
+        a client. If it doesn't exist, creates it with columns derived
+        from the Pydantic model via ``new_with_schema()``, then returns a
+        connected client.
+
+        Args:
+            session: An authenticated SharePointSession.
+            list_name: Display name for the list.
+            model: A Pydantic BaseModel subclass defining the list columns.
+                Only used if the list needs to be created.
+
+        Returns:
+            A connected ListClient instance.
+
+        Raises:
+            SharePointAPIError: If the Graph API calls fail.
+        """
+        existing = list_existing(session)
+        if list_name in existing:
+            logger.info("List '%s' already exists, connecting", list_name)
+            return cls(session, list_name)
+
+        logger.info("List '%s' not found, creating with schema from %s", list_name, model.__name__)
+        return cls.new_with_schema(session, list_name, model)
 
     def _resolve_list_id(self) -> str:
         """Resolve the list ID by name from the SharePoint site.

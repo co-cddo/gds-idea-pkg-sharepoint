@@ -131,7 +131,14 @@ class SharePointSession:
         logger.debug("Resolved site ID: %s", self._site_id)
         return self._site_id
 
-    def request(self, method: str, path: str, json: dict | None = None, params: dict | None = None) -> dict:
+    def request(
+        self,
+        method: str,
+        path: str,
+        json: dict | None = None,
+        params: dict | None = None,
+        extra_headers: dict | None = None,
+    ) -> dict:
         """Make an authenticated request to the Microsoft Graph API.
 
         Handles token injection and raises structured errors on failure.
@@ -141,6 +148,9 @@ class SharePointSession:
             path: URL path relative to ``https://graph.microsoft.com/v1.0``.
             json: Optional JSON body for POST/PATCH requests.
             params: Optional query parameters.
+            extra_headers: Optional additional headers merged into the request.
+                The ``Authorization`` header is always set from the token and
+                cannot be overridden here.
 
         Returns:
             Parsed JSON response as a dict.
@@ -150,7 +160,7 @@ class SharePointSession:
             SharePointAuthError: If token acquisition fails.
         """
         token = self.get_token()
-        headers = {"Authorization": f"Bearer {token}"}
+        headers = {"Authorization": f"Bearer {token}", **(extra_headers or {})}
 
         response = self._http.request(method, path, headers=headers, json=json, params=params)
 

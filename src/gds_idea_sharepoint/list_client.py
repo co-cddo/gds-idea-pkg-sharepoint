@@ -26,6 +26,8 @@ Usage::
 
     items = client.get_items()
     item = client.create_item({"Title": "New item", "Status": "Open"})
+    client.upsert_item({"Title": "New item", "Status": "Closed"})  # updates existing
+    client.upsert_item({"Title": "Another item"})                  # creates new
     client.update_item(item["id"], {"Status": "Closed"})
     client.delete_item(item["id"])
     client.delete_list()
@@ -230,12 +232,17 @@ class ListClient:
         self,
         select: list[str] | None = None,
         filter_expr: str | None = None,
+        prefer_unindexed: bool = False,
     ) -> list[dict[str, Any]]:
         """Get all items from the list.
 
         Args:
             select: Optional list of field names to return.
             filter_expr: Optional OData $filter expression.
+            prefer_unindexed: If True, sends the
+                ``Prefer: HonorNonIndexedQueriesWarningMayFailRandomly`` header,
+                allowing filters on non-indexed columns. Safe for small lists;
+                may fail unpredictably on large ones.
 
         Returns:
             List of item dicts, each containing ``id`` and ``fields``.
@@ -249,10 +256,13 @@ class ListClient:
         if filter_expr:
             params["$filter"] = filter_expr
 
+        extra_headers = {"Prefer": "HonorNonIndexedQueriesWarningMayFailRandomly"} if prefer_unindexed else None
+
         data = self._session.request(
             "GET",
             f"/sites/{self._site_id}/lists/{self._list_id}/items",
             params=params,
+            extra_headers=extra_headers,
         )
         return data.get("value", [])
 
@@ -350,6 +360,50 @@ class ListClient:
             "DELETE",
             f"/sites/{self._site_id}/lists/{self._list_id}/items/{item_id}",
         )
+
+    def upsert_item(self, fields: dict[str, Any], *, key_field: str = "Title") -> dict[str, Any]:
+        """Create or update a list item, matching on a key field.
+
+        Queries for an existing item where ``key_field`` matches the value in
+        ``fields``. Creates the item if none is found; updates it if exactly one
+        is found. Raises if the key is ambiguous (multiple matches) or missing.
+
+        Args:
+            fields: Dict of column name -> value pairs. Must include ``key_field``.
+            key_field: Column name used to look up the existing item. Defaults
+                to ``"Title"``.
+
+        Returns:
+            The item dict with ``id`` and ``fields`` keys, reflecting the
+            state after the create or update.
+
+        Raises:
+            ValueError: If ``key_field`` is not present in ``fields``.
+            SharePointAPIError: If multiple items match the key (ambiguous),
+                or if any underlying Graph API call fails.
+        """
+        if key_field not in fields:
+            raise ValueError(f"key_field '{key_field}' must be present in fields")
+
+        key_value = str(fields[key_field]).replace("'", "''")  # OData single-quote escape
+        existing = self.get_items(filter_expr=f"fields/{key_field} eq '{key_value}'", prefer_unindexed=True)
+
+        if len(existing) > 1:
+            raise SharePointAPIError(
+                f"upsert_item: {len(existing)} items match {key_field}='{fields[key_field]}' in list '{self.list_name}'",
+                status_code=409,
+                error_code="ambiguousKey",
+            )
+
+        if not existing:
+            logger.info("upsert_item: no match on %s — creating", key_field)
+            return self.create_item(fields)
+
+        match = existing[0]
+        item_id = match["id"]
+        logger.info("upsert_item: match %s — updating", item_id)
+        updated_fields = self.update_item(item_id, fields)
+        return {"id": item_id, "fields": updated_fields}
 
     def delete_list(self) -> None:
         """Delete the entire list from the SharePoint site.

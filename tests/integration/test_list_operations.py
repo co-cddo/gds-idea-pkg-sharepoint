@@ -89,3 +89,27 @@ def test_delete_item(list_client):
     with pytest.raises(SharePointAPIError) as exc_info:
         list_client.get_item(item_id)
     assert exc_info.value.status_code == 404
+
+
+def test_upsert_item_creates_then_updates(list_client):
+    """upsert_item should create on first call then update on second, leaving one item."""
+    result_create = list_client.upsert_item({"Title": "Upsert target"})
+    assert result_create["fields"]["Title"] == "Upsert target"
+    original_id = result_create["id"]
+
+    result_update = list_client.upsert_item({"Title": "Upsert target"})
+
+    # Same item — not re-created
+    assert result_update["id"] == original_id
+    items = list_client.get_items()
+    assert len(items) == 1
+
+
+def test_upsert_item_distinct_titles_create_separate(list_client):
+    """upsert_item with different keys should create separate items."""
+    list_client.upsert_item({"Title": "Item Alpha"})
+    list_client.upsert_item({"Title": "Item Beta"})
+
+    items = list_client.get_items()
+    titles = {item["fields"]["Title"] for item in items}
+    assert titles == {"Item Alpha", "Item Beta"}

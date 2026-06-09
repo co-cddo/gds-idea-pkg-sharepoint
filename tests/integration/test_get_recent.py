@@ -14,7 +14,6 @@ import time
 from uuid import uuid4
 
 import pytest
-from dotenv import load_dotenv
 
 from box2.receiver.handlers import _is_self_write
 from box2.sharepoint import ListClient, SharePointSession
@@ -32,7 +31,6 @@ logger = logging.getLogger(__name__)
 @pytest.fixture
 def session():
     """Create a real SharePointSession from environment variables."""
-    load_dotenv()
     return SharePointSession.from_env()
 
 

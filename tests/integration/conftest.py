@@ -8,6 +8,9 @@ Without credentials, tests are automatically skipped with a helpful message.
 import os
 
 import pytest
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 def _has_aws_credentials() -> bool:

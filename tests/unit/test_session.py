@@ -260,3 +260,161 @@ def test_get_token_wraps_credential_failure(session):
 
     with pytest.raises(SharePointAuthError, match="Failed to acquire Graph API token"):
         session.get_token()
+
+
+# ============================================================================
+# from_secret Tests
+# ============================================================================
+
+FULL_SECRET = {
+    "tenant_id": "test-tenant-id",
+    "client_id": "test-client-id",
+    "site_host": "contoso.sharepoint.com",
+    "site_path": "/sites/test-site",
+    "role_arn": "arn:aws:iam::123456789012:role/test-role",
+}
+
+
+def _make_sm_client(secret: dict):
+    """Return a mock Secrets Manager client that returns the given secret."""
+    import json
+
+    sm = MagicMock()
+    sm.get_secret_value.return_value = {"SecretString": json.dumps(secret)}
+    return sm
+
+
+@patch("box2.sharepoint.session.ClientAssertionCredential")
+@patch("box2.sharepoint.session.httpx.Client")
+@patch("box2.sharepoint.session.boto3.client")
+def test_from_secret_builds_session(mock_boto, mock_http, mock_cred):
+    """from_secret should build a session from the secret JSON."""
+    mock_boto.return_value = _make_sm_client(FULL_SECRET)
+
+    session = SharePointSession.from_secret("my-secret")
+
+    assert session.tenant_id == "test-tenant-id"
+    assert session.client_id == "test-client-id"
+    assert session.site_host == "contoso.sharepoint.com"
+    assert session.site_path == "/sites/test-site"
+    assert session._role_arn == "arn:aws:iam::123456789012:role/test-role"
+
+
+@patch("box2.sharepoint.session.ClientAssertionCredential")
+@patch("box2.sharepoint.session.httpx.Client")
+@patch("box2.sharepoint.session.boto3.client")
+def test_from_secret_accepts_arn_as_name(mock_boto, mock_http, mock_cred):
+    """from_secret should accept a full ARN as the secret_name."""
+    mock_boto.return_value = _make_sm_client(FULL_SECRET)
+
+    arn = "arn:aws:secretsmanager:eu-west-2:123456789012:secret:my-secret-abc123"
+    session = SharePointSession.from_secret(arn)
+
+    mock_boto.return_value.get_secret_value.assert_called_once_with(SecretId=arn)
+    assert session.tenant_id == "test-tenant-id"
+
+
+@patch("box2.sharepoint.session.ClientAssertionCredential")
+@patch("box2.sharepoint.session.httpx.Client")
+@patch("box2.sharepoint.session.boto3.client")
+def test_from_secret_uses_explicit_region(mock_boto, mock_http, mock_cred):
+    """from_secret should pass the explicit region to the SM client."""
+    mock_boto.return_value = _make_sm_client(FULL_SECRET)
+
+    SharePointSession.from_secret("my-secret", region="us-east-1")
+
+    mock_boto.assert_called_once_with("secretsmanager", region_name="us-east-1")
+
+
+@patch.dict("os.environ", {"AWS_REGION": "eu-central-1"})
+@patch("box2.sharepoint.session.ClientAssertionCredential")
+@patch("box2.sharepoint.session.httpx.Client")
+@patch("box2.sharepoint.session.boto3.client")
+def test_from_secret_falls_back_to_aws_region_env(mock_boto, mock_http, mock_cred):
+    """from_secret should use AWS_REGION env var when no region is passed."""
+    mock_boto.return_value = _make_sm_client(FULL_SECRET)
+
+    SharePointSession.from_secret("my-secret")
+
+    mock_boto.assert_called_once_with("secretsmanager", region_name="eu-central-1")
+
+
+@patch.dict("os.environ", {}, clear=True)
+@patch("box2.sharepoint.session.ClientAssertionCredential")
+@patch("box2.sharepoint.session.httpx.Client")
+@patch("box2.sharepoint.session.boto3.client")
+def test_from_secret_defaults_region_to_eu_west_2(mock_boto, mock_http, mock_cred):
+    """from_secret should default region to eu-west-2."""
+    mock_boto.return_value = _make_sm_client(FULL_SECRET)
+
+    SharePointSession.from_secret("my-secret")
+
+    mock_boto.assert_called_once_with("secretsmanager", region_name="eu-west-2")
+
+
+@patch("box2.sharepoint.session.ClientAssertionCredential")
+@patch("box2.sharepoint.session.httpx.Client")
+@patch("box2.sharepoint.session.boto3.client")
+def test_from_secret_role_arn_from_secret_json(mock_boto, mock_http, mock_cred):
+    """from_secret should use role_arn from the secret JSON."""
+    mock_boto.return_value = _make_sm_client(FULL_SECRET)
+
+    session = SharePointSession.from_secret("my-secret")
+
+    assert session._role_arn == FULL_SECRET["role_arn"]
+
+
+@patch("box2.sharepoint.session.ClientAssertionCredential")
+@patch("box2.sharepoint.session.httpx.Client")
+@patch("box2.sharepoint.session.boto3.client")
+def test_from_secret_role_arn_falls_back_to_arg(mock_boto, mock_http, mock_cred):
+    """from_secret should use the role_arn arg when the secret omits it."""
+    secret_without_role = {k: v for k, v in FULL_SECRET.items() if k != "role_arn"}
+    mock_boto.return_value = _make_sm_client(secret_without_role)
+
+    arg_arn = "arn:aws:iam::999:role/fallback-role"
+    session = SharePointSession.from_secret("my-secret", role_arn=arg_arn)
+
+    assert session._role_arn == arg_arn
+
+
+@patch("box2.sharepoint.session.boto3.client")
+def test_from_secret_raises_when_no_role_arn(mock_boto):
+    """from_secret should raise when role_arn is absent from both secret and arg."""
+    secret_without_role = {k: v for k, v in FULL_SECRET.items() if k != "role_arn"}
+    mock_boto.return_value = _make_sm_client(secret_without_role)
+
+    with pytest.raises(SharePointConfigError, match="role_arn"):
+        SharePointSession.from_secret("my-secret")
+
+
+@patch("box2.sharepoint.session.boto3.client")
+def test_from_secret_raises_on_missing_keys(mock_boto):
+    """from_secret should raise listing any missing required keys."""
+    incomplete = {"tenant_id": "t", "client_id": "c"}
+    mock_boto.return_value = _make_sm_client(incomplete)
+
+    with pytest.raises(SharePointConfigError, match="missing required keys"):
+        SharePointSession.from_secret("my-secret")
+
+
+@patch("box2.sharepoint.session.boto3.client")
+def test_from_secret_raises_on_invalid_json(mock_boto):
+    """from_secret should raise SharePointConfigError when secret is not valid JSON."""
+    sm = MagicMock()
+    sm.get_secret_value.return_value = {"SecretString": "not-json{{{"}
+    mock_boto.return_value = sm
+
+    with pytest.raises(SharePointConfigError, match="not valid JSON"):
+        SharePointSession.from_secret("my-secret")
+
+
+@patch("box2.sharepoint.session.boto3.client")
+def test_from_secret_raises_on_sm_error(mock_boto):
+    """from_secret should raise SharePointConfigError when Secrets Manager fails."""
+    sm = MagicMock()
+    sm.get_secret_value.side_effect = Exception("ResourceNotFoundException")
+    mock_boto.return_value = sm
+
+    with pytest.raises(SharePointConfigError, match="Failed to fetch secret"):
+        SharePointSession.from_secret("my-secret")

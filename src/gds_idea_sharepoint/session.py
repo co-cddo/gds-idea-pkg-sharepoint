@@ -6,7 +6,18 @@ The auth flow:
    via Azure AD's client_assertion grant
 3. The token is cached and auto-refreshed by azure-identity
 
-Required environment variables:
+Two factory methods are provided:
+
+``SharePointSession.from_env()``
+    Reads config from environment variables (see below).
+
+``SharePointSession.from_secret(secret_name)``
+    Reads config from an AWS Secrets Manager secret. The secret must be a
+    JSON object with keys: ``tenant_id``, ``client_id``, ``site_host``,
+    ``site_path``, and ``role_arn``. Eliminates the boilerplate of fetching
+    and injecting secrets before calling ``from_env()``.
+
+Required environment variables (for ``from_env``):
     SHAREPOINT_TENANT_ID  — Azure AD tenant ID
     SHAREPOINT_CLIENT_ID  — Azure AD app registration client ID
     SHAREPOINT_SITE_HOST  — SharePoint site hostname (e.g. contoso.sharepoint.com)
@@ -17,6 +28,7 @@ Optional:
     AWS_REGION            — AWS region for STS calls (default: eu-west-2)
 """
 
+import json
 import logging
 import os
 
@@ -92,6 +104,74 @@ class SharePointSession:
             site_path=os.environ["SHAREPOINT_SITE_PATH"],
             role_arn=os.environ["SHAREPOINT_ROLE_ARN"],
             aws_region=os.environ.get("AWS_REGION", "eu-west-2"),
+        )
+
+    @classmethod
+    def from_secret(
+        cls,
+        secret_name: str,
+        role_arn: str | None = None,
+        region: str | None = None,
+    ) -> "SharePointSession":
+        """Create a session by reading config from an AWS Secrets Manager secret.
+
+        The secret must be a JSON object with the following keys:
+
+        .. code-block:: json
+
+            {
+                "tenant_id": "...",
+                "client_id": "...",
+                "site_host": "...",
+                "site_path": "...",
+                "role_arn":  "..."
+            }
+
+        ``role_arn`` may be omitted from the secret if the ``role_arn``
+        parameter is supplied instead; the secret JSON takes precedence.
+
+        Args:
+            secret_name: Name or ARN of the Secrets Manager secret.
+            role_arn: Fallback IAM role ARN for JWT vending, used only when
+                the secret JSON does not contain a ``role_arn`` key.
+            region: AWS region for the Secrets Manager client. Falls back to
+                the ``AWS_REGION`` environment variable, then ``"eu-west-2"``.
+
+        Raises:
+            SharePointConfigError: If the secret cannot be fetched, is not
+                valid JSON, is missing required keys, or no ``role_arn`` can
+                be resolved.
+        """
+        region = region or os.environ.get("AWS_REGION", "eu-west-2")
+        logger.debug("Loading SharePoint config from secret '%s' (region=%s)", secret_name, region)
+
+        try:
+            sm = boto3.client("secretsmanager", region_name=region)
+            response = sm.get_secret_value(SecretId=secret_name)
+            secret = json.loads(response["SecretString"])
+        except json.JSONDecodeError as e:
+            raise SharePointConfigError(f"Secret '{secret_name}' is not valid JSON: {e}") from e
+        except Exception as e:
+            raise SharePointConfigError(f"Failed to fetch secret '{secret_name}': {e}") from e
+
+        required_keys = ["tenant_id", "client_id", "site_host", "site_path"]
+        missing = [k for k in required_keys if not secret.get(k)]
+        if missing:
+            raise SharePointConfigError(f"Secret '{secret_name}' is missing required keys: {', '.join(missing)}")
+
+        resolved_role_arn = secret.get("role_arn") or role_arn
+        if not resolved_role_arn:
+            raise SharePointConfigError(
+                f"Secret '{secret_name}' does not contain 'role_arn' and no role_arn argument was provided"
+            )
+
+        return cls(
+            tenant_id=secret["tenant_id"],
+            client_id=secret["client_id"],
+            site_host=secret["site_host"],
+            site_path=secret["site_path"],
+            role_arn=resolved_role_arn,
+            aws_region=region,
         )
 
     def get_token(self) -> str:

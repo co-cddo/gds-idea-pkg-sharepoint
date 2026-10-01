@@ -1,3 +1,4 @@
+import sys
 from datetime import datetime
 from enum import StrEnum
 from pprint import pprint
@@ -105,10 +106,19 @@ def test_unwrap_optional_strips_typing_optional():
     assert unwrap_optional(Optional[str]) is str  # noqa: UP045 - deliberately testing the legacy form
 
 
-@pytest.mark.parametrize("tp", [str, int, list[str], str | None])
+@pytest.mark.parametrize("tp", [str, int, list[str], str | int])
 def test_unwrap_optional_leaves_other_types_unchanged(tp):
-    """Non-Optional types (including PEP 604 unions) are returned as-is."""
+    """Types that are not a single-type Optional are returned as-is."""
     assert unwrap_optional(tp) == tp
+
+
+def test_unwrap_optional_pep604_union_depends_on_python_version():
+    """``T | None`` is unwrapped on Python 3.14+ (where it is a typing.Union) but not before.
+
+    Pins the current cross-version behaviour so that a change to it is deliberate.
+    """
+    expected = str if sys.version_info >= (3, 14) else str | None
+    assert unwrap_optional(str | None) == expected
 
 
 @pytest.mark.parametrize("tp", [AnyHttpUrl, HttpUrl, AnyUrl, list[AnyHttpUrl], list[HttpUrl]])

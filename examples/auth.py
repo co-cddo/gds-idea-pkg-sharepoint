@@ -12,7 +12,7 @@ Set these environment variables before running (or add to .env):
     export SHAREPOINT_ROLE_ARN=<iam-role-arn>
 
 Usage:
-    uv run python examples/test_sharepoint_auth.py
+    uv run python examples/auth.py
 """
 
 import logging

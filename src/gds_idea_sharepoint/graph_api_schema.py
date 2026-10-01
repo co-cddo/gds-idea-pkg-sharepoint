@@ -12,8 +12,18 @@ logger = logging.getLogger(__name__)
 _URL_TYPES: set[type] = {AnyHttpUrl, HttpUrl, AnyUrl}
 
 
-def _unwrap_optional(tp: Any) -> Any:
-    """Optional[T] -> T"""
+def unwrap_optional(tp: Any) -> Any:
+    """Strip ``Optional`` from a type annotation.
+
+    Only ``typing.Optional[T]`` / ``Union[T, None]`` is unwrapped. PEP 604
+    unions (``T | None``) are returned unchanged.
+
+    Args:
+        tp: A type annotation.
+
+    Returns:
+        ``T`` if *tp* is ``Optional[T]``, otherwise *tp* unchanged.
+    """
     origin = get_origin(tp)
     if origin is Union:
         args = [a for a in get_args(tp) if a is not type(None)]
@@ -29,11 +39,18 @@ def _is_enum_type(tp: Any) -> bool:
         return False
 
 
-def _contains_url_type(tp: Any) -> bool:
+def contains_url_type(tp: Any) -> bool:
     """Return True if *tp* is, or contains, a Pydantic URL type.
 
     Handles both bare ``AnyHttpUrl`` and generic aliases like
-    ``list[AnyHttpUrl]``.
+    ``list[AnyHttpUrl]``. Shared by the schema generator (which emits a
+    rich-text column) and by callers that serialise values for such columns.
+
+    Args:
+        tp: A type annotation.
+
+    Returns:
+        True if *tp* is or directly wraps a Pydantic URL type.
     """
     if tp in _URL_TYPES:
         return True
@@ -75,7 +92,7 @@ def generate_graph_schema(model: type[BaseModel], list_name: str) -> dict[str, A
             logger.info(f"Field '{name}' will be handled by the built-in 'Title' column. Skipping schema entry.")
             continue
 
-        tp = _unwrap_optional(field.annotation)
+        tp = unwrap_optional(field.annotation)
         formatted_display_name = name.replace("_", " ").title()
 
         column: dict[str, Any] = {
@@ -95,7 +112,7 @@ def generate_graph_schema(model: type[BaseModel], list_name: str) -> dict[str, A
         elif tp is bool:
             column["boolean"] = {}
         else:
-            text_type = "richText" if _contains_url_type(tp) else "plain"
+            text_type = "richText" if contains_url_type(tp) else "plain"
             column["text"] = {"allowMultipleLines": True, "textType": text_type}
 
         if field.is_required():

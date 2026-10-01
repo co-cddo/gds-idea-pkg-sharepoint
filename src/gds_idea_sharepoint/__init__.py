@@ -7,7 +7,7 @@ from box2.sharepoint.exceptions import (
     SharePointConfigError,
     SharePointError,
 )
-from box2.sharepoint.graph_api_schema import generate_graph_schema
+from box2.sharepoint.graph_api_schema import contains_url_type, generate_graph_schema, unwrap_optional
 from box2.sharepoint.list_client import ListClient, list_existing
 from box2.sharepoint.models import Subscription
 from box2.sharepoint.protocols import SubscribableResource
@@ -27,4 +27,6 @@ __all__ = [
     "SharePointAuthError",
     "SharePointAPIError",
     "generate_graph_schema",
+    "unwrap_optional",
+    "contains_url_type",
 ]

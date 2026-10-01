@@ -38,7 +38,7 @@ LIST_NAME = "integration-test-list"
 
 
 def main():
-    from box2.sharepoint import ListClient, SharePointSession
+    from gds_idea_sharepoint import ListClient, SharePointSession
 
     # Step 1: Create session
     logger.info("Creating SharePoint session...")
@@ -60,7 +60,7 @@ def main():
     # Step 3: Create a test item
     logger.info("Creating a test item...")
     try:
-        new_item = client.create_item({"Title": "box2 integration test"})
+        new_item = client.create_item({"Title": "sharepoint integration test"})
         new_id = new_item.get("id")
         logger.info("Created item id=%s", new_id)
     except Exception as e:
@@ -82,7 +82,7 @@ def main():
     # Step 5: Update the item
     logger.info("Updating item %s...", new_id)
     try:
-        updated_fields = client.update_item(new_id, {"Title": "box2 integration test (updated)"})
+        updated_fields = client.update_item(new_id, {"Title": "sharepoint integration test (updated)"})
         logger.info("  Updated Title: %s", updated_fields.get("Title"))
     except Exception as e:
         logger.error("Failed to update item: %s", e)

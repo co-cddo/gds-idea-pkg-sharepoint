@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import pytest
 
-from box2.sharepoint import ListClient, SharePointAPIError, SharePointSession
+from gds_idea_sharepoint import ListClient, SharePointAPIError, SharePointSession
 
 pytestmark = [pytest.mark.integration]
 

@@ -6,7 +6,7 @@ requests.
 
 Usage::
 
-    from box2.sharepoint import SharePointSession, DocsClient, WebhookClient
+    from gds_idea_sharepoint import SharePointSession, DocsClient, WebhookClient
 
     session = SharePointSession.from_env()
 
@@ -48,8 +48,8 @@ from typing import Any
 
 import httpx
 
-from box2.sharepoint.exceptions import SharePointAPIError
-from box2.sharepoint.session import SharePointSession
+from gds_idea_sharepoint.exceptions import SharePointAPIError
+from gds_idea_sharepoint.session import SharePointSession
 
 logger = logging.getLogger(__name__)
 

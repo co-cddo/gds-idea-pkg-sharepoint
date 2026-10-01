@@ -14,7 +14,7 @@ from uuid import uuid4
 
 import pytest
 
-from box2.sharepoint import ListClient, SharePointSession
+from gds_idea_sharepoint import ListClient, SharePointSession
 
 pytestmark = [pytest.mark.integration]
 
@@ -125,7 +125,7 @@ def test_get_recent_filter_expression_is_logged(list_client, caplog):
     list_client.create_item({"Title": "Filter test item"})
     time.sleep(2)
 
-    with caplog.at_level(logging.DEBUG, logger="box2.sharepoint"):
+    with caplog.at_level(logging.DEBUG, logger="gds_idea_sharepoint"):
         items = list_client.get_recent(minutes=5)
 
     logger.info("get_recent(minutes=5) returned %d item(s)", len(items))

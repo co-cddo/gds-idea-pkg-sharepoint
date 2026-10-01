@@ -1,17 +1,17 @@
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from pprint import pprint
 from typing import Optional
 
 import pytest
 from pydantic import AnyHttpUrl, AnyUrl, BaseModel, Field, HttpUrl
 
-from box2.sharepoint.graph_api_schema import contains_url_type, generate_graph_schema, unwrap_optional
+from gds_idea_sharepoint.graph_api_schema import contains_url_type, generate_graph_schema, unwrap_optional
 
 # --- Mock Models for Testing ---
 
 
-class MockStatus(str, Enum):
+class MockStatus(StrEnum):
     OPEN = "open"
     CLOSED = "closed"
 
@@ -125,7 +125,7 @@ def test_contains_url_type_false_for_other_types(tp):
 
 def test_helpers_exported_from_package():
     """unwrap_optional and contains_url_type are part of the public sharepoint API."""
-    import box2.sharepoint as sp
+    import gds_idea_sharepoint as sp
 
     assert sp.unwrap_optional is unwrap_optional
     assert sp.contains_url_type is contains_url_type

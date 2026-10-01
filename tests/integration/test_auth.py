@@ -6,7 +6,7 @@ Requires AWS credentials and SharePoint environment variables.
 
 import pytest
 
-from box2.sharepoint import SharePointSession
+from gds_idea_sharepoint import SharePointSession
 
 pytestmark = [pytest.mark.integration]
 

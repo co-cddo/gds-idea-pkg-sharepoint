@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    from box2.sharepoint import SharePointSession
+    from gds_idea_sharepoint import SharePointSession
 
     # Step 1: Create session from environment variables
     logger.info("Creating SharePoint session from environment variables...")

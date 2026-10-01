@@ -36,7 +36,7 @@ import boto3
 import httpx
 from azure.identity import ClientAssertionCredential
 
-from box2.sharepoint.exceptions import SharePointAPIError, SharePointAuthError, SharePointConfigError
+from gds_idea_sharepoint.exceptions import SharePointAPIError, SharePointAuthError, SharePointConfigError
 
 logger = logging.getLogger(__name__)
 

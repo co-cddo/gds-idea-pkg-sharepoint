@@ -2,8 +2,8 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from box2.sharepoint.exceptions import SharePointAPIError
-from box2.sharepoint.list_client import ListClient
+from gds_idea_sharepoint.exceptions import SharePointAPIError
+from gds_idea_sharepoint.list_client import ListClient
 
 # ============================================================================
 # Fixtures
@@ -293,7 +293,7 @@ def test_get_recent_uses_correct_cutoff(client, mock_session):
 
     mock_session.request.return_value = {"value": []}
 
-    with patch("box2.sharepoint.list_client.datetime") as mock_dt:
+    with patch("gds_idea_sharepoint.list_client.datetime") as mock_dt:
         now = datetime(2026, 2, 23, 12, 0, 0, tzinfo=UTC)
         mock_dt.now.return_value = now
         mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
@@ -344,7 +344,7 @@ def test_get_recent_rejects_negative_minutes(client):
 
 def test_list_existing_returns_display_names(mock_session):
     """list_existing should return display names of all lists on the site."""
-    from box2.sharepoint.list_client import list_existing
+    from gds_idea_sharepoint.list_client import list_existing
 
     mock_session.request.return_value = {
         "value": [
@@ -361,7 +361,7 @@ def test_list_existing_returns_display_names(mock_session):
 
 def test_list_existing_returns_empty_for_no_lists(mock_session):
     """list_existing should return an empty list when no lists exist."""
-    from box2.sharepoint.list_client import list_existing
+    from gds_idea_sharepoint.list_client import list_existing
 
     mock_session.request.return_value = {"value": []}
 
@@ -372,7 +372,7 @@ def test_list_existing_returns_empty_for_no_lists(mock_session):
 
 def test_list_existing_calls_correct_endpoint(mock_session):
     """list_existing should query GET /sites/{site_id}/lists."""
-    from box2.sharepoint.list_client import list_existing
+    from gds_idea_sharepoint.list_client import list_existing
 
     mock_session.request.return_value = {"value": []}
 

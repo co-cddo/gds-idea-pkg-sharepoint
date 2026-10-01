@@ -21,7 +21,7 @@ Set these environment variables before running (or add to .env):
     export SHAREPOINT_ROLE_ARN=<iam-role-arn>
 
 Usage:
-    uv run python examples/test_sharepoint_list.py
+    uv run python examples/list_operations.py
 """
 
 import logging

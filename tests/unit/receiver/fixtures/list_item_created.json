@@ -1,0 +1,17 @@
+{
+    "value": [
+        {
+            "subscriptionId": "sub-abc-123",
+            "changeType": "created",
+            "clientState": "test-secret",
+            "resource": "sites/site-id-001/lists/list-id-002/items/42",
+            "subscriptionExpirationDateTime": "2026-02-27T12:00:00.000Z",
+            "tenantId": "tenant-id-999",
+            "resourceData": {
+                "@odata.type": "#Microsoft.Graph.listItem",
+                "@odata.id": "sites/site-id-001/lists/list-id-002/items/42",
+                "id": "42"
+            }
+        }
+    ]
+}

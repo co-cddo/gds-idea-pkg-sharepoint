@@ -1,6 +1,6 @@
 # gds-idea-sharepoint
 
-SharePoint access via the Microsoft Graph API: lists, document libraries and webhook (change notification) subscriptions.
+SharePoint access via the Microsoft Graph API: lists, document libraries, webhook (change notification) subscriptions, and an optional FastAPI receiver for those notifications.
 
 Authentication uses AWS outbound identity federation. AWS STS vends a JWT, and `azure-identity` exchanges it for a Microsoft Graph token through Azure AD's client-assertion grant. No Azure client secret is stored.
 
@@ -21,6 +21,15 @@ With `uv`, add the index to your `pyproject.toml` and depend on the package as n
 name = "gds-idea"
 url = "https://co-cddo.github.io/gds-idea-pypi/simple/"
 ```
+
+The webhook receiver is optional and brings extra dependencies:
+
+```bash
+pip install "gds-idea-sharepoint[receiver]"   # adds FastAPI
+pip install "gds-idea-sharepoint[lambda]"     # receiver + Mangum, for AWS Lambda behind API Gateway
+```
+
+Importing `gds_idea_sharepoint` never imports the receiver, so the base install does not need FastAPI.
 
 ## Usage
 
@@ -48,6 +57,46 @@ Main classes:
 | `WebhookClient` | Create, renew and delete Graph change-notification subscriptions |
 | `generate_graph_schema` | Build a Graph list schema from a Pydantic model |
 
+### Webhook receiver
+
+`WebhookClient` registers a subscription; `gds_idea_sharepoint.receiver` is the endpoint Graph then calls. The receiver handles the validation handshake and the `clientState` check, fetches recently changed items, drops the app's own writes, de-duplicates, and calls your handler once per item.
+
+```python
+from gds_idea_sharepoint import DocsClient, ListClient, SharePointSession, WebhookClient
+from gds_idea_sharepoint.receiver import ReceiverConfig, WebhookRoute, create_app
+
+session = SharePointSession.from_env()
+docs = DocsClient(session, library_name="Documents")
+reviews = ListClient(session, list_name="Reviews")
+
+
+async def process_new_file(item: dict) -> None: ...
+async def process_review(item: dict) -> None: ...
+
+
+app = create_app(
+    config=ReceiverConfig(client_state="shared-secret", app_identity="<service-principal-app-id>"),
+    routes=[
+        WebhookRoute(path="/file_uploaded", get_items=lambda: docs.get_recent(minutes=2),
+                     handler=process_new_file, filter_self=False),
+        WebhookRoute(path="/review_updated", get_items=lambda: reviews.get_recent(minutes=2),
+                     handler=process_review, filter_self=True),
+    ],
+)
+
+# Each route is its own subscription URL:
+WebhookClient(session).subscribe(
+    resource=reviews,
+    notification_url="https://example.com/review_updated",
+    client_state="shared-secret",
+    change_types=["updated"],
+)
+```
+
+- **Routes:** one endpoint per subscription. `filter_self=True` skips items whose `lastModifiedBy.application.id` equals `app_identity`.
+- **Deduplication:** the dedup record is written before the handler runs, giving at-most-once handling (handlers may call LLMs and are not idempotent). `InMemoryDedup` is for local use only; on AWS Lambda use `DynamoDedup`, because concurrent invocations share no memory.
+- **Lambda:** wrap the app with `Mangum(app, lifespan="off")`.
+
 ### Configuration
 
 `SharePointSession.from_env()` reads:
@@ -72,7 +121,7 @@ The STS session name appears in CloudTrail and can be matched by `sts:RoleSessio
 uv sync
 uv run pre-commit install
 
-uv run pytest                                   # unit tests
+uv run pytest                                   # unit tests (uv sync installs all extras via the dev group)
 AWS_PROFILE=<profile> uv run pytest tests/integration/ -v   # needs AWS credentials and a live SharePoint site
 
 uv run ruff check src/ tests/

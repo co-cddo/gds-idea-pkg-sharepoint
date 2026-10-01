@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime
 from enum import Enum
+from types import UnionType
 from typing import Any, Union, get_args, get_origin
 
 from pydantic import AnyHttpUrl, AnyUrl, BaseModel, HttpUrl
@@ -13,23 +14,23 @@ _URL_TYPES: set[type] = {AnyHttpUrl, HttpUrl, AnyUrl}
 
 
 def unwrap_optional(tp: Any) -> Any:
-    """Strip ``Optional`` from a type annotation.
+    """Strip ``None`` from an optional type annotation.
 
-    ``typing.Optional[T]`` / ``Union[T, None]`` is always unwrapped. Whether a
-    PEP 604 union (``T | None``) is unwrapped depends on the Python version:
-    before 3.14 ``T | None`` is a ``types.UnionType`` and is returned unchanged,
-    from 3.14 it is a ``typing.Union`` and is unwrapped to ``T``. As a result
-    ``generate_graph_schema`` can produce different column types for the same
-    model on different interpreters.
+    Unwraps ``T | None``, ``Optional[T]`` and ``Union[T, None]`` to ``T`` on every supported
+    Python version. (Before Python 3.14 ``T | None`` is a ``types.UnionType`` rather than a
+    ``typing.Union``, so both are checked.)
+
+    A union of several non-``None`` types, for example ``int | str | None``, is not a simple
+    optional and is returned unchanged.
 
     Args:
         tp: A type annotation.
 
     Returns:
-        ``T`` if *tp* is unwrapped as described above, otherwise *tp* unchanged.
+        ``T`` if *tp* is an optional ``T``, otherwise *tp* unchanged.
     """
     origin = get_origin(tp)
-    if origin is Union:
+    if origin is Union or origin is UnionType:
         args = [a for a in get_args(tp) if a is not type(None)]
         if len(args) == 1:
             return args[0]

@@ -60,8 +60,11 @@ Main classes:
 | `SHAREPOINT_SITE_PATH` | Site path, e.g. `/sites/my-site` |
 | `SHAREPOINT_ROLE_ARN` | IAM role to assume before vending the STS JWT |
 | `AWS_REGION` | Optional, defaults to `eu-west-2` |
+| `SHAREPOINT_ROLE_SESSION_NAME` | Optional `RoleSessionName` for STS `AssumeRole`, defaults to `box2-sharepoint` |
 
-`SharePointSession.from_secret(name)` reads the same values from an AWS Secrets Manager JSON secret with the keys `tenant_id`, `client_id`, `site_host`, `site_path` and `role_arn`.
+`SharePointSession.from_secret(name)` reads the same values from an AWS Secrets Manager JSON secret with the keys `tenant_id`, `client_id`, `site_host`, `site_path` and `role_arn`, plus an optional `role_session_name`.
+
+The STS session name appears in CloudTrail and can be matched by `sts:RoleSessionName` conditions in an IAM trust policy, so the default (`box2-sharepoint`) is kept for compatibility. It can also be passed directly as `role_session_name=` to `SharePointSession(...)` or `SharePointSession.from_secret(...)`. It must be 2-64 characters from `[A-Za-z0-9_+=,.@-]`.
 
 ## Development
 

@@ -14,7 +14,8 @@ Two factory methods are provided:
 ``SharePointSession.from_secret(secret_name)``
     Reads config from an AWS Secrets Manager secret. The secret must be a
     JSON object with keys: ``tenant_id``, ``client_id``, ``site_host``,
-    ``site_path``, and ``role_arn``. Eliminates the boilerplate of fetching
+    ``site_path``, and ``role_arn`` (optionally ``role_session_name``).
+    Eliminates the boilerplate of fetching
     and injecting secrets before calling ``from_env()``.
 
 Required environment variables (for ``from_env``):
@@ -25,12 +26,15 @@ Required environment variables (for ``from_env``):
     SHAREPOINT_ROLE_ARN   — IAM role ARN to assume before STS JWT vending
 
 Optional:
-    AWS_REGION            — AWS region for STS calls (default: eu-west-2)
+    AWS_REGION                    — AWS region for STS calls (default: eu-west-2)
+    SHAREPOINT_ROLE_SESSION_NAME  — ``RoleSessionName`` sent to STS AssumeRole
+                                    (default: ``box2-sharepoint``)
 """
 
 import json
 import logging
 import os
+import re
 
 import boto3
 import httpx
@@ -42,6 +46,14 @@ logger = logging.getLogger(__name__)
 
 GRAPH_SCOPE = "https://graph.microsoft.com/.default"
 GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
+
+# Default RoleSessionName sent to STS AssumeRole. It appears in CloudTrail and can be
+# matched by IAM trust policy conditions (sts:RoleSessionName), so changing it can
+# break existing roles. Override with ``role_session_name`` / SHAREPOINT_ROLE_SESSION_NAME.
+DEFAULT_ROLE_SESSION_NAME = "box2-sharepoint"
+
+# STS constraint: 2-64 characters from [\w+=,.@-]
+_ROLE_SESSION_NAME_PATTERN = re.compile(r"[\w+=,.@-]{2,64}", re.ASCII)
 
 
 class SharePointSession:
@@ -59,13 +71,36 @@ class SharePointSession:
         site_path: str,
         role_arn: str,
         aws_region: str = "eu-west-2",
+        role_session_name: str = DEFAULT_ROLE_SESSION_NAME,
     ):
+        """Create a session.
+
+        Args:
+            tenant_id: Azure AD tenant ID.
+            client_id: Azure AD app registration client ID.
+            site_host: SharePoint site hostname, e.g. ``contoso.sharepoint.com``.
+            site_path: SharePoint site path, e.g. ``/sites/my-site``.
+            role_arn: IAM role ARN to assume before STS JWT vending.
+            aws_region: AWS region for STS calls.
+            role_session_name: ``RoleSessionName`` sent to STS AssumeRole. Shows up in
+                CloudTrail and can be matched by IAM trust policy conditions.
+
+        Raises:
+            SharePointConfigError: If ``role_session_name`` is not a valid STS session
+                name (2-64 characters from ``[\\w+=,.@-]``).
+        """
+        if not _ROLE_SESSION_NAME_PATTERN.fullmatch(role_session_name):
+            raise SharePointConfigError(
+                f"Invalid role_session_name {role_session_name!r}: must be 2-64 characters from [\\w+=,.@-]"
+            )
+
         self.tenant_id = tenant_id
         self.client_id = client_id
         self.site_host = site_host
         self.site_path = site_path
         self._role_arn = role_arn
         self._aws_region = aws_region
+        self._role_session_name = role_session_name
         self._site_id: str | None = None
 
         self._credential = ClientAssertionCredential(
@@ -104,6 +139,7 @@ class SharePointSession:
             site_path=os.environ["SHAREPOINT_SITE_PATH"],
             role_arn=os.environ["SHAREPOINT_ROLE_ARN"],
             aws_region=os.environ.get("AWS_REGION", "eu-west-2"),
+            role_session_name=os.environ.get("SHAREPOINT_ROLE_SESSION_NAME") or DEFAULT_ROLE_SESSION_NAME,
         )
 
     @classmethod
@@ -112,6 +148,7 @@ class SharePointSession:
         secret_name: str,
         role_arn: str | None = None,
         region: str | None = None,
+        role_session_name: str | None = None,
     ) -> "SharePointSession":
         """Create a session by reading config from an AWS Secrets Manager secret.
 
@@ -130,12 +167,18 @@ class SharePointSession:
         ``role_arn`` may be omitted from the secret if the ``role_arn``
         parameter is supplied instead; the secret JSON takes precedence.
 
+        The secret may also contain an optional ``role_session_name`` key. The
+        same precedence applies: secret JSON, then the ``role_session_name``
+        parameter, then ``DEFAULT_ROLE_SESSION_NAME``.
+
         Args:
             secret_name: Name or ARN of the Secrets Manager secret.
             role_arn: Fallback IAM role ARN for JWT vending, used only when
                 the secret JSON does not contain a ``role_arn`` key.
             region: AWS region for the Secrets Manager client. Falls back to
                 the ``AWS_REGION`` environment variable, then ``"eu-west-2"``.
+            role_session_name: Fallback ``RoleSessionName`` for STS AssumeRole, used
+                only when the secret JSON does not contain ``role_session_name``.
 
         Raises:
             SharePointConfigError: If the secret cannot be fetched, is not
@@ -172,6 +215,7 @@ class SharePointSession:
             site_path=secret["site_path"],
             role_arn=resolved_role_arn,
             aws_region=region,
+            role_session_name=secret.get("role_session_name") or role_session_name or DEFAULT_ROLE_SESSION_NAME,
         )
 
     def get_token(self) -> str:
@@ -272,7 +316,7 @@ class SharePointSession:
             logger.debug("Assuming role %s before JWT vending", self._role_arn)
             assumed = sts.assume_role(
                 RoleArn=self._role_arn,
-                RoleSessionName="box2-sharepoint",
+                RoleSessionName=self._role_session_name,
             )
             creds = assumed["Credentials"]
             sts = boto3.client(

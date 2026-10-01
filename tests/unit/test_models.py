@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from box2.sharepoint.models import Subscription
+from gds_idea_sharepoint.models import Subscription
 
 # ============================================================================
 # Fixtures

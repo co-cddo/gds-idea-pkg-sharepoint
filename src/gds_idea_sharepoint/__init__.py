@@ -1,18 +1,18 @@
-"""box2.sharepoint — SharePoint operations via Microsoft Graph API."""
+"""gds_idea_sharepoint — SharePoint operations via Microsoft Graph API."""
 
-from box2.sharepoint.docs_client import DocsClient
-from box2.sharepoint.exceptions import (
+from gds_idea_sharepoint.docs_client import DocsClient
+from gds_idea_sharepoint.exceptions import (
     SharePointAPIError,
     SharePointAuthError,
     SharePointConfigError,
     SharePointError,
 )
-from box2.sharepoint.graph_api_schema import contains_url_type, generate_graph_schema, unwrap_optional
-from box2.sharepoint.list_client import ListClient, list_existing
-from box2.sharepoint.models import Subscription
-from box2.sharepoint.protocols import SubscribableResource
-from box2.sharepoint.session import SharePointSession
-from box2.sharepoint.webhook_client import WebhookClient
+from gds_idea_sharepoint.graph_api_schema import contains_url_type, generate_graph_schema, unwrap_optional
+from gds_idea_sharepoint.list_client import ListClient, list_existing
+from gds_idea_sharepoint.models import Subscription
+from gds_idea_sharepoint.protocols import SubscribableResource
+from gds_idea_sharepoint.session import SharePointSession
+from gds_idea_sharepoint.webhook_client import WebhookClient
 
 __all__ = [
     "SharePointSession",

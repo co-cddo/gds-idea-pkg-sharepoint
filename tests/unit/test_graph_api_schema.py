@@ -1,17 +1,18 @@
+import sys
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from pprint import pprint
 from typing import Optional
 
 import pytest
 from pydantic import AnyHttpUrl, AnyUrl, BaseModel, Field, HttpUrl
 
-from box2.sharepoint.graph_api_schema import contains_url_type, generate_graph_schema, unwrap_optional
+from gds_idea_sharepoint.graph_api_schema import contains_url_type, generate_graph_schema, unwrap_optional
 
 # --- Mock Models for Testing ---
 
 
-class MockStatus(str, Enum):
+class MockStatus(StrEnum):
     OPEN = "open"
     CLOSED = "closed"
 
@@ -105,10 +106,19 @@ def test_unwrap_optional_strips_typing_optional():
     assert unwrap_optional(Optional[str]) is str  # noqa: UP045 - deliberately testing the legacy form
 
 
-@pytest.mark.parametrize("tp", [str, int, list[str], str | None])
+@pytest.mark.parametrize("tp", [str, int, list[str], str | int])
 def test_unwrap_optional_leaves_other_types_unchanged(tp):
-    """Non-Optional types (including PEP 604 unions) are returned as-is."""
+    """Types that are not a single-type Optional are returned as-is."""
     assert unwrap_optional(tp) == tp
+
+
+def test_unwrap_optional_pep604_union_depends_on_python_version():
+    """``T | None`` is unwrapped on Python 3.14+ (where it is a typing.Union) but not before.
+
+    Pins the current cross-version behaviour so that a change to it is deliberate.
+    """
+    expected = str if sys.version_info >= (3, 14) else str | None
+    assert unwrap_optional(str | None) == expected
 
 
 @pytest.mark.parametrize("tp", [AnyHttpUrl, HttpUrl, AnyUrl, list[AnyHttpUrl], list[HttpUrl]])
@@ -125,7 +135,7 @@ def test_contains_url_type_false_for_other_types(tp):
 
 def test_helpers_exported_from_package():
     """unwrap_optional and contains_url_type are part of the public sharepoint API."""
-    import box2.sharepoint as sp
+    import gds_idea_sharepoint as sp
 
     assert sp.unwrap_optional is unwrap_optional
     assert sp.contains_url_type is contains_url_type

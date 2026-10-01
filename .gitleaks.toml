@@ -1,0 +1,9 @@
+title = "box2 gitleaks config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Mock Secrets Manager ARN using the AWS documentation example account ID (123456789012)"
+regexTarget = "line"
+regexes = ['''arn:aws:secretsmanager:[a-z0-9-]+:123456789012:secret:''']

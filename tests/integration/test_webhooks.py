@@ -20,8 +20,8 @@ from uuid import uuid4
 
 import pytest
 
-from box2.sharepoint import ListClient, SharePointSession, WebhookClient
-from box2.sharepoint.models import Subscription
+from gds_idea_sharepoint import ListClient, SharePointSession, WebhookClient
+from gds_idea_sharepoint.models import Subscription
 
 pytestmark = [pytest.mark.integration, pytest.mark.webhook]
 

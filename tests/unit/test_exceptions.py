@@ -1,6 +1,6 @@
 import pytest
 
-from box2.sharepoint.exceptions import (
+from gds_idea_sharepoint.exceptions import (
     SharePointAPIError,
     SharePointAuthError,
     SharePointConfigError,

@@ -15,14 +15,18 @@ _URL_TYPES: set[type] = {AnyHttpUrl, HttpUrl, AnyUrl}
 def unwrap_optional(tp: Any) -> Any:
     """Strip ``Optional`` from a type annotation.
 
-    Only ``typing.Optional[T]`` / ``Union[T, None]`` is unwrapped. PEP 604
-    unions (``T | None``) are returned unchanged.
+    ``typing.Optional[T]`` / ``Union[T, None]`` is always unwrapped. Whether a
+    PEP 604 union (``T | None``) is unwrapped depends on the Python version:
+    before 3.14 ``T | None`` is a ``types.UnionType`` and is returned unchanged,
+    from 3.14 it is a ``typing.Union`` and is unwrapped to ``T``. As a result
+    ``generate_graph_schema`` can produce different column types for the same
+    model on different interpreters.
 
     Args:
         tp: A type annotation.
 
     Returns:
-        ``T`` if *tp* is ``Optional[T]``, otherwise *tp* unchanged.
+        ``T`` if *tp* is unwrapped as described above, otherwise *tp* unchanged.
     """
     origin = get_origin(tp)
     if origin is Union:

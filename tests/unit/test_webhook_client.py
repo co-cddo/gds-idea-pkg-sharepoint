@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from box2.sharepoint.models import Subscription
-from box2.sharepoint.webhook_client import MAX_EXPIRATION_MINUTES, WebhookClient
+from gds_idea_sharepoint.models import Subscription
+from gds_idea_sharepoint.webhook_client import MAX_EXPIRATION_MINUTES, WebhookClient
 
 # ============================================================================
 # Fixtures
@@ -151,7 +151,7 @@ def test_subscribe_uses_custom_expiration(client, mock_session, mock_resource):
     """subscribe should compute expiration based on the given minutes."""
     mock_session.request.return_value = _graph_subscription()
 
-    with patch("box2.sharepoint.webhook_client.datetime") as mock_dt:
+    with patch("gds_idea_sharepoint.webhook_client.datetime") as mock_dt:
         now = datetime(2026, 2, 20, 12, 0, 0, tzinfo=UTC)
         mock_dt.now.return_value = now
         mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
@@ -455,7 +455,7 @@ def test_renew_if_expiring_rejects_negative_threshold(client):
 
 def test_list_client_satisfies_subscribable_resource(mock_session):
     """ListClient should expose resource_path and supported_change_types."""
-    from box2.sharepoint.list_client import ListClient
+    from gds_idea_sharepoint.list_client import ListClient
 
     mock_session.resolve_site_id.return_value = SITE_ID
     mock_session.request.return_value = {"value": [{"id": LIST_ID, "displayName": "Test List"}]}

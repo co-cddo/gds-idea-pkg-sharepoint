@@ -6,7 +6,7 @@ across any subscribable resource (lists, drives, etc.).
 
 Usage::
 
-    from box2.sharepoint import SharePointSession, ListClient, DocsClient, WebhookClient
+    from gds_idea_sharepoint import SharePointSession, ListClient, DocsClient, WebhookClient
 
     session = SharePointSession.from_env()
     webhooks = WebhookClient(session)
@@ -42,9 +42,9 @@ Usage::
 import logging
 from datetime import UTC, datetime, timedelta
 
-from box2.sharepoint.models import Subscription
-from box2.sharepoint.protocols import SubscribableResource
-from box2.sharepoint.session import SharePointSession
+from gds_idea_sharepoint.models import Subscription
+from gds_idea_sharepoint.protocols import SubscribableResource
+from gds_idea_sharepoint.session import SharePointSession
 
 logger = logging.getLogger(__name__)
 

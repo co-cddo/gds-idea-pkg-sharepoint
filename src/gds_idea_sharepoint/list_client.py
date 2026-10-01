@@ -5,7 +5,7 @@ SharePointSession which handles the auth chain and HTTP requests.
 
 Usage::
 
-    from box2.sharepoint import SharePointSession, ListClient, list_existing
+    from gds_idea_sharepoint import SharePointSession, ListClient, list_existing
 
     session = SharePointSession.from_env()
 
@@ -39,9 +39,9 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from box2.sharepoint.exceptions import SharePointAPIError
-from box2.sharepoint.graph_api_schema import generate_graph_schema
-from box2.sharepoint.session import SharePointSession
+from gds_idea_sharepoint.exceptions import SharePointAPIError
+from gds_idea_sharepoint.graph_api_schema import generate_graph_schema
+from gds_idea_sharepoint.session import SharePointSession
 
 logger = logging.getLogger(__name__)
 

@@ -9,8 +9,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from box2.sharepoint.docs_client import DocsClient
-from box2.sharepoint.exceptions import SharePointAPIError
+from gds_idea_sharepoint.docs_client import DocsClient
+from gds_idea_sharepoint.exceptions import SharePointAPIError
 
 # ============================================================================
 # Fixtures
@@ -276,7 +276,7 @@ def test_get_recent_returns_only_files_within_window(client, mock_session):
         ]
     }
 
-    with patch("box2.sharepoint.docs_client.datetime") as mock_dt:
+    with patch("gds_idea_sharepoint.docs_client.datetime") as mock_dt:
         from datetime import UTC, datetime
 
         now = datetime(2026, 2, 23, 12, 0, 0, tzinfo=UTC)
@@ -298,7 +298,7 @@ def test_get_recent_returns_empty_when_no_recent_files(client, mock_session):
         ]
     }
 
-    with patch("box2.sharepoint.docs_client.datetime") as mock_dt:
+    with patch("gds_idea_sharepoint.docs_client.datetime") as mock_dt:
         from datetime import UTC, datetime
 
         now = datetime(2026, 2, 23, 12, 0, 0, tzinfo=UTC)
@@ -330,7 +330,7 @@ def test_get_recent_filters_out_folders_and_deleted(client, mock_session):
         ]
     }
 
-    with patch("box2.sharepoint.docs_client.datetime") as mock_dt:
+    with patch("gds_idea_sharepoint.docs_client.datetime") as mock_dt:
         from datetime import UTC, datetime
 
         now = datetime(2026, 2, 23, 12, 0, 0, tzinfo=UTC)
@@ -351,7 +351,7 @@ def test_get_recent_defaults_to_two_minutes(client, mock_session):
         ]
     }
 
-    with patch("box2.sharepoint.docs_client.datetime") as mock_dt:
+    with patch("gds_idea_sharepoint.docs_client.datetime") as mock_dt:
         from datetime import UTC, datetime
 
         now = datetime(2026, 2, 23, 12, 0, 0, tzinfo=UTC)
@@ -385,7 +385,7 @@ def test_download_file_uses_pre_authenticated_url(client, tmp_path):
     file_meta = _file_item(name="test.pdf", download_url="https://cdn.example.com/test.pdf")
     download_dir = str(tmp_path / "downloads")
 
-    with patch("box2.sharepoint.docs_client.httpx.stream") as mock_stream:
+    with patch("gds_idea_sharepoint.docs_client.httpx.stream") as mock_stream:
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.iter_bytes.return_value = [b"file content"]
@@ -408,7 +408,7 @@ def test_download_file_falls_back_to_fetching_url(client, mock_session, tmp_path
         "@microsoft.graph.downloadUrl": "https://cdn.example.com/fresh-test.pdf",
     }
 
-    with patch("box2.sharepoint.docs_client.httpx.stream") as mock_stream:
+    with patch("gds_idea_sharepoint.docs_client.httpx.stream") as mock_stream:
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.iter_bytes.return_value = [b"file content"]
@@ -440,7 +440,7 @@ def test_download_file_raises_on_http_error(client, tmp_path):
     file_meta = _file_item(name="test.pdf")
     download_dir = str(tmp_path / "downloads")
 
-    with patch("box2.sharepoint.docs_client.httpx.stream") as mock_stream:
+    with patch("gds_idea_sharepoint.docs_client.httpx.stream") as mock_stream:
         mock_response = MagicMock()
         mock_response.status_code = 403
         mock_stream.return_value.__enter__ = MagicMock(return_value=mock_response)
@@ -457,7 +457,7 @@ def test_download_file_creates_directory(client, tmp_path):
     file_meta = _file_item(name="test.pdf")
     download_dir = str(tmp_path / "new" / "nested" / "dir")
 
-    with patch("box2.sharepoint.docs_client.httpx.stream") as mock_stream:
+    with patch("gds_idea_sharepoint.docs_client.httpx.stream") as mock_stream:
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.iter_bytes.return_value = [b"data"]

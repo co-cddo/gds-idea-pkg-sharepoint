@@ -1,8 +1,7 @@
-import sys
 from datetime import datetime
 from enum import StrEnum
 from pprint import pprint
-from typing import Optional
+from typing import Optional, Union
 
 import pytest
 from pydantic import AnyHttpUrl, AnyUrl, BaseModel, Field, HttpUrl
@@ -106,19 +105,91 @@ def test_unwrap_optional_strips_typing_optional():
     assert unwrap_optional(Optional[str]) is str  # noqa: UP045 - deliberately testing the legacy form
 
 
-@pytest.mark.parametrize("tp", [str, int, list[str], str | int])
+@pytest.mark.parametrize("tp", [str, int, list[str], str | int, int | str | None])
 def test_unwrap_optional_leaves_other_types_unchanged(tp):
-    """Types that are not a single-type Optional are returned as-is."""
+    """Non-optional types and multi-type unions are returned as-is."""
     assert unwrap_optional(tp) == tp
 
 
-def test_unwrap_optional_pep604_union_depends_on_python_version():
-    """``T | None`` is unwrapped on Python 3.14+ (where it is a typing.Union) but not before.
+@pytest.mark.parametrize(
+    ("tp", "expected"),
+    [
+        (str | None, str),
+        (None | str, str),
+        (Union[str, None], str),  # noqa: UP007 - deliberately testing the legacy form
+        (list[str] | None, list[str]),
+        (list[AnyHttpUrl] | None, list[AnyHttpUrl]),
+        (MockStatus | None, MockStatus),
+        (datetime | None, datetime),
+    ],
+)
+def test_unwrap_optional_unwraps_every_spelling_of_optional(tp, expected):
+    """``T | None``, ``None | T`` and ``Union[T, None]`` unwrap identically on every Python version."""
+    assert unwrap_optional(tp) == expected
 
-    Pins the current cross-version behaviour so that a change to it is deliberate.
-    """
-    expected = str if sys.version_info >= (3, 14) else str | None
-    assert unwrap_optional(str | None) == expected
+
+def test_contains_url_type_sees_through_optional_list_of_urls():
+    """An optional list of URLs is still recognised as a URL field once unwrapped."""
+    assert contains_url_type(unwrap_optional(list[AnyHttpUrl] | None)) is True
+
+
+# ===== Optional fields in generated schemas =====
+
+
+class OptionalFieldsModel(BaseModel):
+    """Every optional (``T | None``) column type the generator special-cases."""
+
+    status: MockStatus | None = Field(default=None, description="optional enum")
+    when: datetime | None = Field(default=None)
+    flag: bool | None = Field(default=None)
+    links: list[AnyHttpUrl] | None = Field(default=None)
+    note: str | None = Field(default=None)
+
+
+def _columns(model: type[BaseModel]) -> dict[str, dict]:
+    return {c["name"]: c for c in generate_graph_schema(model, "L")["columns"]}
+
+
+def test_optional_enum_is_a_dropdown():
+    """``Enum | None`` produces a choice column, the same as a required enum."""
+    column = _columns(OptionalFieldsModel)["status"]
+    assert column["choice"]["choices"] == ["open", "closed"]
+    assert "required" not in column
+
+
+def test_optional_datetime_and_bool_get_typed_columns():
+    """``datetime | None`` and ``bool | None`` produce dateTime and boolean columns."""
+    columns = _columns(OptionalFieldsModel)
+    assert "dateTime" in columns["when"]
+    assert "boolean" in columns["flag"]
+
+
+def test_optional_url_list_is_rich_text():
+    """``list[AnyHttpUrl] | None`` is a rich-text column so links render."""
+    assert _columns(OptionalFieldsModel)["links"]["text"]["textType"] == "richText"
+
+
+def test_optional_plain_text_is_unchanged():
+    """``str | None`` stays a plain multi-line text column."""
+    assert _columns(OptionalFieldsModel)["note"]["text"] == {"allowMultipleLines": True, "textType": "plain"}
+
+
+def test_optional_and_required_fields_produce_the_same_column_shape():
+    """Making a field optional changes only whether it is required, never its column type."""
+
+    class Required(BaseModel):
+        status: MockStatus
+        when: datetime
+        flag: bool
+
+    class Optional_(BaseModel):  # noqa: N801
+        status: MockStatus | None = None
+        when: datetime | None = None
+        flag: bool | None = None
+
+    for name, required_column in _columns(Required).items():
+        optional_column = _columns(Optional_)[name]
+        assert {k: v for k, v in required_column.items() if k != "required"} == optional_column
 
 
 @pytest.mark.parametrize("tp", [AnyHttpUrl, HttpUrl, AnyUrl, list[AnyHttpUrl], list[HttpUrl]])
